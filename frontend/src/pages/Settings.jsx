@@ -95,6 +95,11 @@ function parseUrl(url) {
   }
 }
 
+// A discovered server connection's reachable host, mirroring how `hostname` is stored.
+function connHost(conn) {
+  try { return new URL(conn.uri).hostname; } catch { return conn.address; }
+}
+
 function loginErrorMessage(e) {
   // The backend returns a specific German reason for connection/timeout/HTTP
   // errors; prefer it, then fall back to status-based wording.
@@ -143,6 +148,7 @@ export default function Settings({ onConnected }) {
   const [connInfo, setConnInfo] = useState(null);
 
   const [servers, setServers] = useState([]);
+  const [selectedServer, setSelectedServer] = useState('');
   const [discovering, setDiscovering] = useState(false);
   const [discoverError, setDiscoverError] = useState('');
 
@@ -267,9 +273,10 @@ export default function Settings({ onConnected }) {
         const server = list[0];
         const conn = server.connections.find((c) => c.https) || server.connections[0];
         if (conn) {
-          try { setHostname(new URL(conn.uri).hostname); } catch { setHostname(conn.address); }
+          setHostname(connHost(conn));
           setPort(String(conn.port));
           setSsl(Boolean(conn.https));
+          setSelectedServer(server.name);
         }
       }
     } catch (e) {
@@ -283,9 +290,10 @@ export default function Settings({ onConnected }) {
     const server = servers.find((s) => s.name === name);
     if (!server || !server.connections.length) return;
     const conn = server.connections.find((c) => c.https) || server.connections[0];
-    try { setHostname(new URL(conn.uri).hostname); } catch { setHostname(conn.address); }
+    setHostname(connHost(conn));
     setPort(String(conn.port));
     setSsl(Boolean(conn.https));
+    setSelectedServer(name);
   };
 
   const doTest = useCallback(async () => {
@@ -456,6 +464,7 @@ export default function Settings({ onConnected }) {
     try { await plexLogout(); } catch { /* ignore */ }
     setUser(null);
     setServers([]);
+    setSelectedServer('');
     setSections([]);
     setTestResult(null);
     showToast('success', 'Abgemeldet');
@@ -465,6 +474,15 @@ export default function Settings({ onConnected }) {
   useEffect(() => {
     if (user && servers.length === 0 && !discovering) doDiscover();
   }, [user]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Reflect the already-active server in the dropdown: once the list is known,
+  // match the saved hostname to a server by its connection host. Runs after
+  // discovery and on reload so the <select> shows the active server, not a blank.
+  useEffect(() => {
+    if (!servers.length || !hostname) return;
+    const match = servers.find((s) => s.connections?.some((c) => connHost(c) === hostname));
+    if (match && match.name !== selectedServer) setSelectedServer(match.name);
+  }, [servers, hostname]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Load movie sections when the Bibliotheken tab is shown and a host is known.
   useEffect(() => {
@@ -480,7 +498,7 @@ export default function Settings({ onConnected }) {
         <div className="flex gap-2">
           <select
             onChange={(e) => onSelectServer(e.target.value)}
-            value=""
+            value={selectedServer}
             className="flex-1 min-w-0 px-3 py-2 rounded-xl bg-zinc-950 text-zinc-100 outline-none focus:ring-2 focus:ring-amber-400/60"
           >
             <option value="" disabled>{servers.length ? 'Server wählen' : 'Server werden geladen…'}</option>
