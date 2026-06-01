@@ -359,6 +359,17 @@ export default function Settings({ onConnected }) {
     onConnected?.();
   }, [stopPolling, showToast, onConnected]);
 
+  // Single failure path for the login flow: stop polling, tear down the
+  // "Verbinde mit Plex …" popup (every branch — it must never hang), and surface
+  // the reason BOTH as a toast and as a persistent inline message under the button.
+  const failLogin = useCallback((message) => {
+    stopPolling();
+    try { popupRef.current?.close(); } catch { /* cross-origin */ }
+    popupRef.current = null;
+    setLoginError(message);
+    showToast('error', message);
+  }, [stopPolling, showToast]);
+
   const startLogin = async () => {
     setLoginError('');
 
@@ -369,7 +380,7 @@ export default function Settings({ onConnected }) {
     // to the real Plex URL once the async PIN request returns.
     const popup = window.open('about:blank', 'plexlogin', 'width=560,height=720');
     if (!popup) {
-      showToast('error', 'Popup blockiert. Bitte Popups für diese Seite erlauben und nochmal versuchen.');
+      failLogin('Popup blockiert. Bitte Popups für diese Seite erlauben und nochmal versuchen.');
       return;
     }
     popupRef.current = popup;
@@ -392,8 +403,7 @@ export default function Settings({ onConnected }) {
         id = res.client_id;
         setClientId(id);
       } catch {
-        try { popup.close(); } catch { /* ignore */ }
-        showToast('error', 'Backend nicht erreichbar');
+        failLogin('Backend nicht erreichbar');
         return;
       }
     }
@@ -402,33 +412,39 @@ export default function Settings({ onConnected }) {
     try {
       pin = await createPlexPin();
     } catch (e) {
-      try { popup.close(); } catch { /* ignore */ }
-      showToast('error', loginErrorMessage(e));
-      setLoginError(e.message || 'error');
+      failLogin(loginErrorMessage(e));
       return;
     }
-    const params = [
-      `clientID=${encodeURIComponent(id)}`,
-      `code=${encodeURIComponent(pin.code)}`,
-      `context[device][product]=${encodeURIComponent('PlexDice')}`,
-    ].join('&');
-    popup.location.href = `https://app.plex.tv/auth#?${params}`;
-    setPolling(true);
 
-    pollRef.current = setInterval(async () => {
-      try {
-        const res = await checkPlexPin(pin.id);
-        if (res.ok) handleLoginSuccess(res.user);
-      } catch {
-        /* transient network error — keep polling */
-      }
-    }, POLL_INTERVAL);
+    // Past this point any unexpected throw (popup gone, etc.) must still tear the
+    // popup down, so the whole tail is guarded by failLogin too.
+    try {
+      const params = [
+        `clientID=${encodeURIComponent(id)}`,
+        `code=${encodeURIComponent(pin.code)}`,
+        `context[device][product]=${encodeURIComponent('PlexDice')}`,
+      ].join('&');
+      popup.location.href = `https://app.plex.tv/auth#?${params}`;
+      setPolling(true);
 
-    timeoutRef.current = setTimeout(() => {
-      stopPolling();
-      showToast('error', 'Zeitüberschreitung – bitte erneut versuchen');
-      setLoginError('timeout');
-    }, LOGIN_TIMEOUT);
+      pollRef.current = setInterval(async () => {
+        try {
+          const res = await checkPlexPin(pin.id);
+          if (res.ok) handleLoginSuccess(res.user);
+        } catch {
+          /* transient network error — keep polling */
+        }
+      }, POLL_INTERVAL);
+
+      timeoutRef.current = setTimeout(() => {
+        stopPolling();
+        const msg = 'Zeitüberschreitung – bitte erneut versuchen';
+        setLoginError(msg);
+        showToast('error', msg);
+      }, LOGIN_TIMEOUT);
+    } catch (e) {
+      failLogin(loginErrorMessage(e));
+    }
   };
 
   const cancelLogin = () => {
@@ -602,9 +618,17 @@ export default function Settings({ onConnected }) {
                     <button onClick={cancelLogin} className="mt-3 text-sm text-zinc-400 active:text-zinc-200">Abbrechen</button>
                   </>
                 )}
-                {!polling && <p className="text-sm text-zinc-400 mt-3">Du wirst kurz zu plex.tv weitergeleitet.</p>}
-                {loginError === 'timeout' && (
-                  <button onClick={startLogin} className="mt-3 text-sm text-amber-400 font-medium">Erneut versuchen</button>
+                {!polling && !loginError && <p className="text-sm text-zinc-400 mt-3">Du wirst kurz zu plex.tv weitergeleitet.</p>}
+                {!polling && loginError && (
+                  <div className="mt-4 w-full max-w-xs p-3 rounded-xl bg-rose-500/10 border border-rose-500/30 text-rose-200 text-sm flex flex-col items-center gap-2">
+                    <div className="flex items-start gap-2">
+                      <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />
+                      <span>{loginError}</span>
+                    </div>
+                    <button onClick={startLogin} className="font-semibold text-amber-400 active:text-amber-300">
+                      Erneut versuchen
+                    </button>
+                  </div>
                 )}
               </div>
             ) : (
