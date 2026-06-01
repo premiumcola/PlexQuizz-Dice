@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import logging
+import time
 from typing import Any, Dict
 
 import requests
@@ -14,6 +15,28 @@ bp = Blueprint("plex_auth", __name__, url_prefix="/api/plex/auth")
 
 _PLEX_TV = "https://plex.tv/api/v2"
 _TIMEOUT = 15
+_RETRIES = 2
+_BACKOFF = 0.4
+# One shared session so the boot-time IPv4 preference and connection reuse apply
+# to every plex.tv call (pin create, pin check, user fetch).
+_session = requests.Session()
+
+
+def _request(method: str, url: str, **kwargs: Any) -> requests.Response:
+    """Issue a plex.tv request with a small bounded retry on transient
+    connection/timeout errors, then let the caller map a final failure to the
+    existing German error responses."""
+    last_exc: requests.RequestException = requests.exceptions.ConnectionError("no attempt made")
+    for attempt in range(_RETRIES + 1):
+        try:
+            return _session.request(method, url, timeout=_TIMEOUT, **kwargs)
+        except (requests.exceptions.ConnectionError, requests.exceptions.Timeout) as exc:
+            last_exc = exc
+            if attempt < _RETRIES:
+                logger.warning("plex.tv %s %s failed (attempt %d/%d): %s",
+                               method, url, attempt + 1, _RETRIES + 1, exc)
+                time.sleep(_BACKOFF * (attempt + 1))
+    raise last_exc
 
 
 def _headers() -> Dict[str, str]:
@@ -33,9 +56,7 @@ def _headers() -> Dict[str, str]:
 def create_pin():
     """Request a fresh login PIN from plex.tv."""
     try:
-        resp = requests.post(
-            f"{_PLEX_TV}/pins", params={"strong": "true"}, headers=_headers(), timeout=_TIMEOUT
-        )
+        resp = _request("POST", f"{_PLEX_TV}/pins", params={"strong": "true"}, headers=_headers())
         resp.raise_for_status()
         data = resp.json()
         return jsonify({"id": data["id"], "code": data["code"]})
@@ -57,7 +78,7 @@ def create_pin():
 def check_pin(pin_id: str):
     """Poll a PIN; once claimed, persist the token + user and report success."""
     try:
-        resp = requests.get(f"{_PLEX_TV}/pins/{pin_id}", headers=_headers(), timeout=_TIMEOUT)
+        resp = _request("GET", f"{_PLEX_TV}/pins/{pin_id}", headers=_headers())
         resp.raise_for_status()
         data = resp.json()
     except requests.RequestException as exc:
@@ -95,7 +116,7 @@ def _fetch_user(token: str) -> Dict[str, Any]:
     """Fetch the signed-in account's username, email and avatar."""
     headers = {**_headers(), "X-Plex-Token": token}
     try:
-        resp = requests.get(f"{_PLEX_TV}/user", headers=headers, timeout=_TIMEOUT)
+        resp = _request("GET", f"{_PLEX_TV}/user", headers=headers)
         resp.raise_for_status()
         data = resp.json()
         return {

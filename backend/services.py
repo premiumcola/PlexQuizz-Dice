@@ -7,6 +7,7 @@ import re
 
 import urllib3
 
+import net_setup
 from atomic_io import file_size
 from library_cache import LibraryCache
 from plex_client import PlexClient, _lan_link_base
@@ -168,6 +169,7 @@ def _backfill_plex_guid() -> None:
         logger.warning("plex_guid backfill skipped: %s", exc)
 
 
+net_setup.bootstrap()
 _log_persistence_diagnostics()
 _seed_from_env()
 settings_store.ensure_client_id()
