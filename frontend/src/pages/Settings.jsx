@@ -566,7 +566,14 @@ export default function Settings({ onConnected }) {
   return (
     <div className="min-h-full bg-zinc-950 text-zinc-100">
       {toast && (
-        <div className={`fixed top-4 left-1/2 -translate-x-1/2 z-[60] px-4 py-2.5 rounded-xl text-sm font-semibold shadow-lg flex items-center gap-2 text-white ${toast.type === 'success' ? 'bg-emerald-500' : 'bg-rose-500'}`}>
+        // Bottom-anchored, centred — never under the notch/Dynamic Island. The offset clears the
+        // mobile bottom tab bar (nav height = 54px base + env(safe-area-inset-bottom), App.jsx) plus
+        // a 1.25rem gap so it floats just above the bar and the home indicator. z-[60] keeps it over
+        // the nav (z-40). On desktop the bottom nav is hidden, so it simply floats near the bottom.
+        <div
+          className={`fixed left-1/2 -translate-x-1/2 z-[60] px-4 py-2.5 rounded-xl text-sm font-semibold shadow-lg flex items-center gap-2 text-white ${toast.type === 'success' ? 'bg-emerald-500' : 'bg-rose-500'}`}
+          style={{ bottom: 'calc(env(safe-area-inset-bottom) + 54px + 1.25rem)' }}
+        >
           {toast.type === 'success' ? <Check className="w-4 h-4" /> : <AlertCircle className="w-4 h-4" />}
           {toast.msg}
         </div>
