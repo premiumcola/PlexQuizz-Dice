@@ -20,3 +20,6 @@ reference/
 .idea
 .vscode
 .DS_Store
+
+# Dev-only throwaway scripts — never ship in the runtime image
+backend/scratch/
