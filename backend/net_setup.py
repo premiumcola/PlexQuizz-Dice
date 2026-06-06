@@ -20,6 +20,7 @@ from __future__ import annotations
 
 import logging
 import socket
+from collections.abc import Iterable
 
 import requests
 import urllib3.util.connection as urllib3_conn
@@ -71,16 +72,22 @@ def _doh_resolve(host: str) -> list[str]:
 
 def _pin_hosts(entries: dict[str, list[str]]) -> None:
     """Append `ip host` lines to /etc/hosts for the given host -> ips map."""
-    lines = ["# plexdice: DoH-resolved plex.tv hosts (system DNS unavailable)\n"]
+    lines = ["# plexdice: DoH-resolved hosts (system DNS unavailable)\n"]
     for host, ips in entries.items():
         lines.extend("%s %s\n" % (ip, host) for ip in ips)
     with open(_HOSTS_FILE, "a", encoding="utf-8") as fh:
         fh.writelines(lines)
 
 
-def ensure_plex_dns() -> None:
-    """Make plex.tv hosts resolvable, DoH-seeding /etc/hosts when the resolver can't."""
-    unresolved = [h for h in _PLEX_HOSTS if not _resolves(h)]
+def ensure_dns(hosts: Iterable[str]) -> None:
+    """Make ``hosts`` resolvable, DoH-seeding /etc/hosts when the system resolver can't.
+
+    Generic form of the plex.tv safety net, reused for any outbound host the app must
+    reach when the container's :53 DNS is blocked — e.g. api.anthropic.com (theme
+    enrichment) and itunes.apple.com (preview lookups). A no-op once the host resolves
+    (the pinned /etc/hosts entry makes getaddrinfo succeed), so it is safe to call often.
+    """
+    unresolved = [h for h in hosts if not _resolves(h)]
     if not unresolved:
         return
     logger.warning("Network: system DNS cannot resolve %s — falling back to DoH", unresolved)
@@ -90,13 +97,18 @@ def ensure_plex_dns() -> None:
         if ips:
             seeded[host] = ips
     if not seeded:
-        logger.error("Network: DoH resolved none of %s — plex.tv stays unreachable", unresolved)
+        logger.error("Network: DoH resolved none of %s — they stay unreachable", unresolved)
         return
     try:
         _pin_hosts(seeded)
         logger.info("Network: pinned DoH results into %s: %s", _HOSTS_FILE, seeded)
     except OSError as exc:
-        logger.error("Network: cannot write %s (%s) — plex.tv may stay unreachable", _HOSTS_FILE, exc)
+        logger.error("Network: cannot write %s (%s) — hosts may stay unreachable", _HOSTS_FILE, exc)
+
+
+def ensure_plex_dns() -> None:
+    """Guarantee the plex.tv OAuth hosts resolve (thin wrapper over ensure_dns)."""
+    ensure_dns(_PLEX_HOSTS)
 
 
 def bootstrap() -> None:
