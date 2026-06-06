@@ -22,7 +22,7 @@ import re
 import threading
 import time
 from datetime import datetime, timezone
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Tuple
 
 import requests
 
@@ -128,30 +128,28 @@ def _parse_theme_json(text: str) -> Optional[Dict[str, str]]:
 def get_theme_suggestion(title: str, year: int | None) -> dict:
     """Ask Haiku for a film's canonical main-theme composer + track title.
 
-    Returns ``{"composer", "theme_title", "confidence"}``. On any failure it returns a
-    low-confidence empty suggestion so a single bad film never aborts a batch.
+    Returns ``{"composer", "theme_title", "confidence"}``. A successful call that finds
+    no nameable theme returns empty strings (a genuine "no theme" verdict). A transport
+    or credential failure PROPAGATES so callers can skip the film and retry it later,
+    rather than caching a permanent miss.
     """
     empty = {"composer": "", "theme_title": "", "confidence": "low"}
     if not title:
         return empty
     year_part = f" ({year})" if year else ""
     prompt = _THEME_PROMPT.format(title=title, year=year_part)
-    try:
-        resp = _get_client().messages.create(
-            model=_MODEL,
-            max_tokens=_MAX_TOKENS,
-            temperature=_TEMPERATURE,
-            messages=[{"role": "user", "content": prompt}],
-        )
-        text = "".join(
-            getattr(block, "text", "")
-            for block in resp.content
-            if getattr(block, "type", None) == "text"
-        )
-        return _parse_theme_json(text) or empty
-    except Exception as exc:  # noqa: BLE001 — never let one film abort a batch
-        logger.warning("Theme suggestion failed for %r: %s", title, exc)
-        return empty
+    resp = _get_client().messages.create(
+        model=_MODEL,
+        max_tokens=_MAX_TOKENS,
+        temperature=_TEMPERATURE,
+        messages=[{"role": "user", "content": prompt}],
+    )
+    text = "".join(
+        getattr(block, "text", "")
+        for block in resp.content
+        if getattr(block, "type", None) == "text"
+    )
+    return _parse_theme_json(text) or empty
 
 
 def _surname(composer: str) -> str:
@@ -255,16 +253,22 @@ def enrich_movie(movie: dict) -> dict | None:
     """Identify a movie's main theme and attach a streamable iTunes preview.
 
     Returns a ``theme_cache`` entry (``eligible=True`` only when a ``preview_url`` was
-    found, else ``eligible=False`` for skip-tracking), or ``None`` if the movie has no
-    usable title.
+    found, else ``eligible=False`` for skip-tracking). Returns ``None`` — meaning "leave
+    uncached, retry later" — when the movie has no usable title or the theme lookup
+    failed (e.g. the model was unreachable), so a transient outage never poisons the
+    cache with permanent misses.
     """
     title = str(movie.get("title") or "").strip()
     if not title:
         return None
     raw_year = movie.get("year")
     year = int(raw_year) if isinstance(raw_year, (int, float)) and raw_year else None
+    try:
+        suggestion = get_theme_suggestion(title, year)
+    except Exception as exc:  # noqa: BLE001 — model/credential outage: skip, retry later
+        logger.warning("Theme suggestion unavailable for %r: %s", title, exc)
+        return None
     entry = _blank_entry(title, year)
-    suggestion = get_theme_suggestion(title, year)
     entry["composer"] = suggestion["composer"]
     entry["theme_title"] = suggestion["theme_title"]
     entry["confidence"] = suggestion["confidence"]
@@ -323,16 +327,33 @@ def list_eligible() -> List[str]:
     return [mid for mid, e in cache.items() if isinstance(e, dict) and e.get("preview_url")]
 
 
+def _partition_uncached(
+    movies: List[Dict[str, Any]], cache: Dict[str, Any]
+) -> Tuple[List[Dict[str, Any]], int]:
+    """Split movies into (not-yet-cached list, already-cached count) by stable id."""
+    uncached: List[Dict[str, Any]] = []
+    already = 0
+    for movie in movies:
+        movie_id = _stable_id(movie)
+        if not movie_id:
+            continue
+        if movie_id in cache:
+            already += 1
+        else:
+            uncached.append(movie)
+    return uncached, already
+
+
 def run_enrichment(limit: int | None = None) -> dict:
     """Enrich up to ``limit`` not-yet-cached movies, additively into theme_cache.json.
 
-    Sequential, synchronous pass. Movies already in the cache are skipped. Returns a
-    summary dict; writes ONLY theme_cache.json (never the protected data files).
+    Sequential, synchronous pass. Movies already in the cache are skipped; movies whose
+    theme lookup fails are left uncached (retried by a later run). Returns a summary
+    dict and writes ONLY theme_cache.json (never the protected data files).
     """
     movies = _load_movies()
     cache = load_theme_cache()
-    uncached = [m for m in movies if (_stable_id(m) or "") not in cache and _stable_id(m)]
-    already_cached = len(movies) - len(uncached)
+    uncached, already_cached = _partition_uncached(movies, cache)
     batch = uncached if limit is None else uncached[: max(0, limit)]
     logger.info("Theme enrichment: %d movies, enriching %d (already cached %d)",
                 len(movies), len(batch), already_cached)
@@ -342,15 +363,15 @@ def run_enrichment(limit: int | None = None) -> dict:
     total = len(cache)
     for movie in batch:
         movie_id = _stable_id(movie)
-        if movie_id is None:
-            continue
+        entry = None
         try:
-            entry = enrich_movie(movie) or _blank_entry(str(movie.get("title") or ""), None)
+            entry = enrich_movie(movie)
         except Exception as exc:  # noqa: BLE001 — one bad film must not abort the batch
             logger.warning("Enrichment failed for id=%s: %s", movie_id, exc)
-            entry = _blank_entry(str(movie.get("title") or ""), None)
-        total = _store_entry(movie_id, entry)
         processed += 1
+        if entry is None:
+            continue  # transient failure: leave uncached so a later run retries it
+        total = _store_entry(movie_id, entry)
         if entry.get("eligible"):
             matched += 1
 
