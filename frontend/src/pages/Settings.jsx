@@ -11,6 +11,7 @@ import {
 } from '../api';
 import QuizConfig from '../components/QuizConfig';
 import DieIcon from '../components/DieIcon';
+import ThemeEnrichmentPanel from '../components/ThemeEnrichmentPanel';
 
 const APP_VERSION = import.meta.env.VITE_APP_VERSION || '1.0.0';
 // Build stamp so the live (possibly PWA-cached) build is identifiable on-device.
@@ -901,6 +902,8 @@ export default function Settings({ onConnected }) {
                 <Toggle checked={reduceMotion} onChange={changeReduceMotion} />
               </div>
             </div>
+
+            <ThemeEnrichmentPanel />
 
             <div className="rounded-2xl bg-zinc-900 ring-1 ring-zinc-800 p-4">
               <h3 className="text-sm font-semibold text-zinc-200 mb-3">Caches</h3>

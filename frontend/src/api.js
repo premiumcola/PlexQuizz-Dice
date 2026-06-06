@@ -169,3 +169,11 @@ export function quizSaveConfig(patch) {
 export function movieInfo(key, force = false) {
   return postJson('/api/movie/info', { key, force });
 }
+
+// ---- Film-music themes ----
+export function getThemeStatus() {
+  return fetch('/api/themes/status').then(unwrap);
+}
+export function startThemeEnrich(count = 200) {
+  return postJson('/api/themes/enrich', { count });
+}
