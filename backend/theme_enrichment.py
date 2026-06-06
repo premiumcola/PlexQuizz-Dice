@@ -426,6 +426,7 @@ def run_enrichment(limit: int | None = None) -> dict:
         if entry.get("eligible"):
             matched += 1
 
+    _log_pass_metrics(len(movies))
     return {
         "processed": processed,
         "matched": matched,
@@ -473,6 +474,7 @@ def _run_batch(count: int) -> None:
         with _status_lock:
             _status["running"] = False
             _status["finished_at"] = _now_iso()
+        _log_pass_metrics(len(batch))
         logger.info("Theme batch finished")
 
 
