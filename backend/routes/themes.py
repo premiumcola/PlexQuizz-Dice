@@ -1,4 +1,4 @@
-"""Film-music theme enrichment API: build the theme cache, list quiz-eligible movies."""
+"""Film-music theme enrichment API: run background batches, report status, list eligible."""
 from __future__ import annotations
 
 from flask import Blueprint, jsonify, request
@@ -10,12 +10,18 @@ bp = Blueprint("themes", __name__, url_prefix="/api/themes")
 
 @bp.post("/enrich")
 def enrich():
-    """Enrich up to ``limit`` not-yet-cached movies (default: all). Returns the summary."""
+    """Start a background batch of ``count`` random uncached movies (default 200)."""
     body = request.get_json(silent=True) or {}
-    raw = body.get("limit")
-    limit = int(raw) if isinstance(raw, (int, float)) and not isinstance(raw, bool) else None
-    summary = theme_enrichment.run_enrichment(limit)
-    return jsonify(summary)
+    raw = body.get("count", 200)
+    count = int(raw) if isinstance(raw, (int, float)) and not isinstance(raw, bool) else 200
+    result = theme_enrichment.start_enrichment_batch(count)
+    return jsonify(result)
+
+
+@bp.get("/status")
+def status():
+    """Live progress of the running/last batch, merged with library + cache totals."""
+    return jsonify(theme_enrichment.get_status())
 
 
 @bp.get("/eligible")
