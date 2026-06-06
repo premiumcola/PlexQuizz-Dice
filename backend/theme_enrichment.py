@@ -28,9 +28,33 @@ from typing import Any, Dict, List, Optional, Tuple
 import requests
 
 import net_setup
+import theme_seed
 from atomic_io import atomic_write_json
 
 logger = logging.getLogger(__name__)
+
+# Per-pass enrichment metrics (S1.3). A pass resets these, then logs one summary line.
+_metrics_lock = threading.Lock()
+_metrics: Dict[str, int] = {"cache_hits": 0, "seed_hits": 0, "haiku_calls": 0}
+
+
+def _reset_metrics(cache_hits: int = 0) -> None:
+    with _metrics_lock:
+        _metrics.update({"cache_hits": cache_hits, "seed_hits": 0, "haiku_calls": 0})
+
+
+def _bump_metric(key: str) -> None:
+    with _metrics_lock:
+        _metrics[key] = _metrics.get(key, 0) + 1
+
+
+def _log_pass_metrics(films: int) -> None:
+    with _metrics_lock:
+        m = dict(_metrics)
+    logger.info(
+        "L1 enrichment done: %d films, cache=%d, seed=%d, haiku=%d",
+        films, m["cache_hits"], m["seed_hits"], m["haiku_calls"],
+    )
 
 # Mirrors services.DATA_DIR without importing it (see module docstring).
 DATA_DIR = os.environ.get("DATA_DIR", "/data")
@@ -276,8 +300,21 @@ def enrich_movie(movie: dict) -> dict | None:
         return None
     raw_year = movie.get("year")
     year = int(raw_year) if isinstance(raw_year, (int, float)) and raw_year else None
+    original_title = str(movie.get("originalTitle") or "").strip() or None
     try:
-        suggestion = get_theme_suggestion(title, year)
+        # Seed before Haiku (S1): a hit gives composer + theme without a model call;
+        # only seed misses / 'unknown' titles fall through to the (keyed) Haiku path.
+        seed_hit = theme_seed.lookup(title, original_title)
+        if seed_hit is not None:
+            _bump_metric("seed_hits")
+            suggestion = {
+                "composer": str(seed_hit.get("composer") or "").strip(),
+                "theme_title": str(seed_hit.get("theme") or "").strip(),
+                "confidence": str(seed_hit.get("confidence") or "low").strip().lower(),
+            }
+        else:
+            _bump_metric("haiku_calls")
+            suggestion = get_theme_suggestion(title, year)
     except Exception as exc:  # noqa: BLE001 — model/credential outage: skip, retry later
         logger.warning("Theme suggestion unavailable for %r: %s", title, exc)
         return None
@@ -368,6 +405,7 @@ def run_enrichment(limit: int | None = None) -> dict:
     cache = load_theme_cache()
     uncached, already_cached = _partition_uncached(movies, cache)
     batch = uncached if limit is None else uncached[: max(0, limit)]
+    _reset_metrics(cache_hits=already_cached)
     logger.info("Theme enrichment: %d movies, enriching %d (already cached %d)",
                 len(movies), len(batch), already_cached)
 
@@ -405,10 +443,12 @@ def _run_batch(count: int) -> None:
     Per-movie failures are logged and counted as no-match (left uncached for retry); a
     fatal error is recorded in _status['error']. Runs in a daemon thread.
     """
+    batch: List[Dict[str, Any]] = []
     try:
         movies = _load_movies()
         cache = load_theme_cache()
         uncached, _ = _partition_uncached(movies, cache)
+        _reset_metrics(cache_hits=max(0, len(movies) - len(uncached)))
         random.shuffle(uncached)
         batch = uncached[: max(0, count)]
         logger.info("Theme batch: %d uncached, processing %d at random", len(uncached), len(batch))
