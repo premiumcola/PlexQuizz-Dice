@@ -18,6 +18,7 @@ from __future__ import annotations
 import json
 import logging
 import os
+import random
 import re
 import threading
 import time
@@ -54,6 +55,18 @@ _itunes_lock = threading.Lock()
 _last_itunes_call = 0.0
 _dns_ready = False
 _anthropic_client: Any = None
+
+# Live progress of the background batch runner (L2). Guarded by _status_lock.
+_status_lock = threading.Lock()
+_status: Dict[str, Any] = {
+    "running": False,
+    "processed": 0,
+    "target": 0,
+    "matched": 0,
+    "started_at": None,
+    "finished_at": None,
+    "error": None,
+}
 
 _FENCE_RE = re.compile(r"^```(?:json)?\s*|\s*```$", re.IGNORECASE)
 
@@ -382,3 +395,85 @@ def run_enrichment(limit: int | None = None) -> dict:
         "already_cached": already_cached,
         "total_in_cache": total,
     }
+
+
+# ---- Background, randomized batch runner (L2) ----
+
+def _run_batch(count: int) -> None:
+    """Enrich a random sample of uncached movies one at a time, updating live status.
+
+    Per-movie failures are logged and counted as no-match (left uncached for retry); a
+    fatal error is recorded in _status['error']. Runs in a daemon thread.
+    """
+    try:
+        movies = _load_movies()
+        cache = load_theme_cache()
+        uncached, _ = _partition_uncached(movies, cache)
+        random.shuffle(uncached)
+        batch = uncached[: max(0, count)]
+        logger.info("Theme batch: %d uncached, processing %d at random", len(uncached), len(batch))
+        for movie in batch:
+            movie_id = _stable_id(movie)
+            entry = None
+            try:
+                entry = enrich_movie(movie)
+            except Exception as exc:  # noqa: BLE001 — per-movie failure must not stop the batch
+                logger.warning("Batch enrichment failed for id=%s: %s", movie_id, exc)
+            if entry is not None and movie_id:
+                _store_entry(movie_id, entry)
+            with _status_lock:
+                _status["processed"] += 1
+                if entry is not None and entry.get("eligible"):
+                    _status["matched"] += 1
+    except Exception as exc:  # noqa: BLE001 — fatal: surface the exact message to the UI
+        logger.exception("Theme batch crashed")
+        with _status_lock:
+            _status["error"] = str(exc)
+    finally:
+        with _status_lock:
+            _status["running"] = False
+            _status["finished_at"] = _now_iso()
+        logger.info("Theme batch finished")
+
+
+def start_enrichment_batch(count: int) -> dict:
+    """Kick off a background batch of ``count`` random uncached movies.
+
+    Returns ``{"started": False, "reason": "already_running"}`` if a run is in progress,
+    otherwise ``{"started": True, "target": count}`` immediately (work continues async).
+    """
+    count = max(1, int(count))
+    with _status_lock:
+        if _status["running"]:
+            return {"started": False, "reason": "already_running"}
+        _status.update({
+            "running": True,
+            "processed": 0,
+            "target": count,
+            "matched": 0,
+            "started_at": _now_iso(),
+            "finished_at": None,
+            "error": None,
+        })
+    threading.Thread(target=_run_batch, args=(count,), daemon=True).start()
+    return {"started": True, "target": count}
+
+
+def get_status() -> dict:
+    """Live batch status merged with freshly computed library/cache totals."""
+    with _status_lock:
+        snapshot = dict(_status)
+    cache = load_theme_cache()
+    total_movies = len(_load_movies())
+    total_cached = len(cache)
+    eligible_count = sum(
+        1 for e in cache.values() if isinstance(e, dict) and e.get("preview_url")
+    )
+    snapshot.update({
+        "total_movies": total_movies,
+        "total_cached": total_cached,
+        "eligible_count": eligible_count,
+        "no_match_count": total_cached - eligible_count,
+        "remaining": max(0, total_movies - total_cached),
+    })
+    return snapshot
