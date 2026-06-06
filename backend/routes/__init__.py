@@ -12,6 +12,7 @@ from .movie_info import bp as movie_info_bp
 from .plex import bp as plex_bp
 from .plex_auth import bp as plex_auth_bp
 from .settings import bp as settings_bp
+from .themes import bp as themes_bp
 
 
 def register_routes(app: Flask) -> None:
@@ -20,6 +21,7 @@ def register_routes(app: Flask) -> None:
     app.register_blueprint(plex_auth_bp)
     app.register_blueprint(plex_bp)
     app.register_blueprint(movie_info_bp)
+    app.register_blueprint(themes_bp)
     app.register_blueprint(quiz_bp)
     app.register_blueprint(health_bp)
     app.register_blueprint(cache_bp)
