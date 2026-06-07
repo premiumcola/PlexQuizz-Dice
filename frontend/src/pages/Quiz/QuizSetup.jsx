@@ -1,11 +1,17 @@
 import { useEffect, useState } from 'react';
-import { ArrowLeft, X, Camera, Play, Loader2, AlertCircle } from 'lucide-react';
+import { ArrowLeft, X, Camera, Play, Loader2, AlertCircle, Clapperboard, Music2, Shuffle } from 'lucide-react';
 import { navigate } from '../../router';
-import { quizNewRound, quizUploadPhoto, quizGetConfig, quizPlayers } from '../../api';
+import { quizNewRound, quizUploadPhoto, quizGetConfig, quizPlayers, getThemeEligible } from '../../api';
 import { saveRound } from './store';
 import { initAudio } from './audio';
 
 const SIZES = [20, 50, 100];
+const MIN_THEMES = 8; // Sound / Mixed need at least this many eligible film-themes
+const MODES = [
+  { v: 'normal', label: 'Nur normale Fragen', sub: 'Bild- und Wissensfragen', Icon: Clapperboard, needsThemes: false },
+  { v: 'sound', label: 'Nur Sound', sub: 'Errate Filme an ihrer Titelmelodie', Icon: Music2, needsThemes: true },
+  { v: 'mixed', label: 'Mixed', sub: 'Normale Fragen + Sound gemischt', Icon: Shuffle, needsThemes: true },
+];
 const DIFFS = [
   { v: 'easy', label: '🟢 Leicht' },
   { v: 'medium', label: '🟡 Mittel' },
@@ -20,6 +26,8 @@ export default function QuizSetup() {
   const [roster, setRoster] = useState([]); // shared saved names (server-side), reusable quick-picks
   const [size, setSize] = useState(50);
   const [difficulty, setDifficulty] = useState('medium');
+  const [mode, setMode] = useState('normal');
+  const [themeCount, setThemeCount] = useState(null); // null until /eligible resolves
   const [photoPreview, setPhotoPreview] = useState(null);
   const [photoId, setPhotoId] = useState(null);
   const [uploading, setUploading] = useState(false);
@@ -34,7 +42,10 @@ export default function QuizSetup() {
       })
       .catch(() => {});
     quizPlayers().then((d) => setRoster(d.players || [])).catch(() => {});
+    getThemeEligible().then((d) => setThemeCount(d.count || 0)).catch(() => setThemeCount(0));
   }, []);
+
+  const themesReady = (themeCount ?? 0) >= MIN_THEMES;
 
   const addPlayer = () => {
     const p = playerInput.trim();
@@ -63,13 +74,20 @@ export default function QuizSetup() {
     initAudio(); // unlock the audio context on this user gesture (iOS Safari)
     setStarting(true);
     setError('');
+    const setup = { name: name.trim(), playerNames: players, photoId };
     try {
+      if (mode === 'sound') {
+        // Pure client-sequenced sound round (no server session needed).
+        const rid = `s${Date.now()}`;
+        saveRound(rid, { mode: 'sound', difficulty, size, sound_enabled: true, setup });
+        navigate(`/quiz/sound/${rid}`);
+        return;
+      }
+      // normal + mixed both generate a server round (normal questions); mixed interleaves
+      // sound questions client-side over those, scored client-side.
       const resp = await quizNewRound({ size, difficulty, name: name.trim() });
-      saveRound(resp.round_id, {
-        ...resp,
-        setup: { name: name.trim(), playerNames: players, photoId },
-      });
-      navigate(`/quiz/play/${resp.round_id}`);
+      saveRound(resp.round_id, { ...resp, mode, setup });
+      navigate(`${mode === 'mixed' ? '/quiz/sound' : '/quiz/play'}/${resp.round_id}`);
     } catch (e) {
       setError(e.message || 'Runde konnte nicht gestartet werden');
       setStarting(false);
@@ -88,6 +106,37 @@ export default function QuizSetup() {
         </header>
 
         <div className="space-y-6">
+          <div>
+            <label className="text-sm font-medium text-zinc-200 uppercase tracking-wide mb-2 block">Modus</label>
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+              {MODES.map(({ v, label, sub, Icon, needsThemes }) => {
+                const disabled = needsThemes && !themesReady;
+                const active = mode === v;
+                return (
+                  <button
+                    key={v}
+                    type="button"
+                    disabled={disabled}
+                    onClick={() => setMode(v)}
+                    className={`text-left rounded-2xl p-3 min-h-[44px] transition-colors ${active ? 'bg-zinc-900 ring-2 ring-[#f5a623]' : 'bg-zinc-900 ring-1 ring-zinc-800'} ${disabled ? 'opacity-40' : 'active:scale-[0.98]'}`}
+                  >
+                    <div className="flex items-center gap-2">
+                      <Icon className={`w-5 h-5 shrink-0 ${active ? 'text-amber-400' : 'text-zinc-400'}`} />
+                      <span className="font-semibold text-zinc-100 leading-tight">{label}</span>
+                    </div>
+                    <div className="text-xs text-zinc-500 mt-1">{sub}</div>
+                  </button>
+                );
+              })}
+            </div>
+            {!themesReady && (
+              <p className="text-xs text-zinc-500 mt-2">
+                Sound &amp; Mixed brauchen mind. {MIN_THEMES} analysierte Film-Themes
+                {themeCount != null ? ` (aktuell ${themeCount})` : ''}.
+              </p>
+            )}
+          </div>
+
           <div>
             <label className="text-sm font-medium text-zinc-200 uppercase tracking-wide mb-2 block">Rundenname</label>
             <input
