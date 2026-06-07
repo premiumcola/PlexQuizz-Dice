@@ -1,9 +1,25 @@
 import { useEffect, useRef, useState } from 'react';
-import { Play, Pause, RotateCcw, Check, X, Music2, ExternalLink } from 'lucide-react';
-import { scoreThemeGuess, answerThemeGuess } from '../../api';
+import { Play, Pause, RotateCcw, Check, X, Music2, ExternalLink, Lightbulb } from 'lucide-react';
+import { scoreThemeGuess, answerThemeGuess, themeHint } from '../../api';
 import { plexAppUrl } from '../../lib/plexLink';
 import { playSound } from './audio';
 import WaveStage from './WaveStage';
+import WuerfelInput from './WuerfelInput';
+
+// Build the tile skeleton from a level-0 hint ({length, revealed:[only gaps]}).
+function slotsFromSkeleton(resp) {
+  const gaps = {};
+  for (const r of resp.revealed || []) gaps[r.index] = r.char;
+  return Array.from({ length: resp.length || 0 }, (_, i) => (
+    i in gaps ? { gap: true, char: gaps[i] } : { gap: false }
+  ));
+}
+// Letter positions (non-gap) revealed by a hint level.
+function lockedFromHint(resp, slots) {
+  const out = {};
+  for (const r of resp.revealed || []) if (slots[r.index] && !slots[r.index].gap) out[r.index] = r.char;
+  return out;
+}
 
 // L4.4 — one Film-Theme question: stream the 30s preview (user-gesture Play, iOS-safe),
 // type the film title, watch a debounced live match meter, and on an accepted/correct guess
@@ -21,13 +37,16 @@ export default function SoundQuestion({ question, soundOn = true, onResolved }) 
   const [meter, setMeter] = useState({ score: 0, accepted: false });
   const [resolved, setResolved] = useState(null); // null | 'correct' | 'wrong'
   const [reveal, setReveal] = useState(null);
+  const [slots, setSlots] = useState(null);
+  const [locked, setLocked] = useState({});
+  const [hintLevel, setHintLevel] = useState(0);
 
   const audioRef = useRef(null);
   const debounceRef = useRef(null);
   const advanceRef = useRef(null);
   const resolvedRef = useRef(false);
 
-  // Fresh question → reset everything and tear down any prior audio.
+  // Fresh question → reset everything, tear down audio, and load the tile skeleton (level-0 hint).
   useEffect(() => {
     resolvedRef.current = false;
     setPlaying(false);
@@ -36,7 +55,15 @@ export default function SoundQuestion({ question, soundOn = true, onResolved }) 
     setMeter({ score: 0, accepted: false });
     setResolved(null);
     setReveal(null);
+    setSlots(null);
+    setLocked({});
+    setHintLevel(0);
+    let alive = true;
+    themeHint(question.question_id, 0)
+      .then((resp) => { if (alive) setSlots(slotsFromSkeleton(resp)); })
+      .catch(() => { if (alive) setSlots([]); });
     return () => {
+      alive = false;
       clearTimeout(debounceRef.current);
       clearTimeout(advanceRef.current);
       const a = audioRef.current;
@@ -123,6 +150,19 @@ export default function SoundQuestion({ question, soundOn = true, onResolved }) 
     } catch {
       resolveWrong();
     }
+  };
+
+  // Next hint: clears the typed guess, KEEPS revealed letters, ADDS the next batch (WuerfelInput
+  // resets its typed state whenever `locked` changes).
+  const onHint = async () => {
+    if (resolvedRef.current || !slots) return;
+    const lvl = hintLevel + 1;
+    try {
+      const resp = await themeHint(question.question_id, lvl);
+      setLocked(lockedFromHint(resp, slots));
+      setHintLevel(lvl);
+      setMeter({ score: 0, accepted: false });
+    } catch { /* ignore */ }
   };
 
   const meterPct = Math.round((meter.score || 0) * 100);
@@ -239,41 +279,27 @@ export default function SoundQuestion({ question, soundOn = true, onResolved }) 
         </div>
       ) : (
         <div className="mt-3">
-          <input
-            value={guess}
-            onChange={(e) => onGuess(e.target.value)}
-            onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); submit(); } }}
-            placeholder="Filmtitel eintippen"
-            autoComplete="off"
-            autoCorrect="off"
-            spellCheck={false}
-            className="w-full min-h-[48px] px-4 rounded-xl bg-zinc-900 ring-1 ring-zinc-800 text-zinc-100 placeholder-zinc-600 outline-none focus:ring-2 focus:ring-amber-400/60"
-          />
+          {slots && slots.length > 0 ? (
+            <WuerfelInput slots={slots} lockedLetters={locked} onGuessChange={onGuess} onSubmit={submit} disabled={false} />
+          ) : (
+            <div className="h-11 flex items-center justify-center text-zinc-600 text-sm">…</div>
+          )}
           {/* Live match meter */}
-          <div className="mt-2 flex items-center gap-3">
+          <div className="mt-3 flex items-center gap-3">
             <div className="flex-1 h-2 rounded-full bg-zinc-800 overflow-hidden">
-              <div
-                className="h-full rounded-full transition-[width] duration-200"
-                style={{ width: `${meterPct}%`, background: meterColor }}
-              />
+              <div className="h-full rounded-full transition-[width] duration-200" style={{ width: `${meterPct}%`, background: meterColor }} />
             </div>
             <span className="text-xs tabular-nums font-medium" style={{ color: meterColor }}>{meterPct}%</span>
           </div>
-          <div className="grid grid-cols-3 gap-2 mt-3">
-            <button
-              type="button"
-              onClick={resolveWrong}
-              className="col-span-1 min-h-[44px] rounded-xl bg-zinc-800 text-zinc-300 text-sm font-medium active:scale-[0.98] transition-transform"
-            >
-              Überspringen
+          <div className="grid grid-cols-4 gap-2 mt-3">
+            <button type="button" onClick={onHint} className="col-span-1 min-h-[44px] rounded-xl bg-zinc-800 text-amber-300 text-sm font-medium flex items-center justify-center gap-1 active:scale-[0.98] transition-transform">
+              <Lightbulb className="w-4 h-4" /> Tipp
             </button>
-            <button
-              type="button"
-              onClick={submit}
-              disabled={!guess.trim()}
-              className="col-span-2 min-h-[44px] rounded-xl bg-amber-400 text-zinc-950 font-semibold flex items-center justify-center gap-2 disabled:opacity-40 active:scale-[0.98] transition-transform"
-            >
-              <Check className="w-4 h-4" /> Antwort prüfen
+            <button type="button" onClick={resolveWrong} className="col-span-1 min-h-[44px] rounded-xl bg-zinc-800 text-zinc-300 text-sm font-medium active:scale-[0.98] transition-transform">
+              Skip
+            </button>
+            <button type="button" onClick={submit} disabled={!guess.trim()} className="col-span-2 min-h-[44px] rounded-xl bg-amber-400 text-zinc-950 font-semibold flex items-center justify-center gap-2 disabled:opacity-40 active:scale-[0.98] transition-transform">
+              <Check className="w-4 h-4" /> Prüfen
             </button>
           </div>
         </div>

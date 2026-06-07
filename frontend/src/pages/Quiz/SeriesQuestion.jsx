@@ -1,8 +1,20 @@
 import { useEffect, useRef, useState } from 'react';
-import { Play, Pause, RotateCcw, Check, X, ExternalLink } from 'lucide-react';
-import { scoreSeriesGuess, answerSeriesGuess } from '../../api';
+import { Play, Pause, RotateCcw, Check, X, ExternalLink, Lightbulb } from 'lucide-react';
+import { scoreSeriesGuess, answerSeriesGuess, seriesHint } from '../../api';
 import { playSound } from './audio';
 import WaveStage from './WaveStage';
+import WuerfelInput from './WuerfelInput';
+
+// The series title is known client-side (it came from /eligible), so the tile skeleton is built
+// locally; hint letters still come from the server endpoint for one shared code path.
+function slotsFromTitle(title) {
+  return Array.from(title || '', (ch) => (/[\p{L}\p{N}]/u.test(ch) ? { gap: false } : { gap: true, char: ch }));
+}
+function lockedFromHint(resp, slots) {
+  const out = {};
+  for (const r of resp.revealed || []) if (slots[r.index] && !slots[r.index].gap) out[r.index] = r.char;
+  return out;
+}
 
 // T2.3/T2.4 — one TV-series theme question: stream the show's Plex theme (user-gesture Play),
 // type the series title, watch a debounced live meter, and on a correct guess reveal the poster
@@ -20,6 +32,9 @@ export default function SeriesQuestion({ show, soundOn = true, onResolved }) {
   const [meter, setMeter] = useState({ score: 0, accepted: false });
   const [resolved, setResolved] = useState(null); // null | 'correct' | 'wrong'
   const [reveal, setReveal] = useState(null);
+  const [slots, setSlots] = useState([]);
+  const [locked, setLocked] = useState({});
+  const [hintLevel, setHintLevel] = useState(0);
 
   const audioRef = useRef(null);
   const debounceRef = useRef(null);
@@ -30,6 +45,7 @@ export default function SeriesQuestion({ show, soundOn = true, onResolved }) {
     resolvedRef.current = false;
     setPlaying(false); setProgress(0); setGuess('');
     setMeter({ score: 0, accepted: false }); setResolved(null); setReveal(null);
+    setSlots(slotsFromTitle(show.title)); setLocked({}); setHintLevel(0);
     return () => {
       clearTimeout(debounceRef.current);
       clearTimeout(advanceRef.current);
@@ -94,10 +110,24 @@ export default function SeriesQuestion({ show, soundOn = true, onResolved }) {
     } catch { resolveWrong(); }
   };
 
+  const onHint = async () => {
+    if (resolvedRef.current) return;
+    const lvl = hintLevel + 1;
+    try {
+      const resp = await seriesHint(show.ratingKey, lvl);
+      setLocked(lockedFromHint(resp, slots));
+      setHintLevel(lvl);
+      setMeter({ score: 0, accepted: false });
+    } catch { /* ignore */ }
+  };
+
   const meterPct = Math.max(0, Math.min(100, Math.round(meter.score || 0)));
   const meterColor = meter.accepted ? '#22c55e' : '#f5a623';
 
   const cover = resolved === 'correct' ? (reveal?.poster_url || null) : null;
+  // Optional: once hints start, fade the poster in BLURRED behind the tiles; de-blur a little
+  // per hint, but never fully clear until solved.
+  const hintBlur = hintLevel > 0 && resolved !== 'correct' ? Math.max(4, 16 - hintLevel * 3) : 0;
 
   return (
     <div className="flex flex-col h-full min-h-0">
@@ -177,24 +207,31 @@ export default function SeriesQuestion({ show, soundOn = true, onResolved }) {
         </div>
       ) : (
         <div className="mt-3">
-          <input
-            value={guess}
-            onChange={(e) => onGuess(e.target.value)}
-            onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); submit(); } }}
-            placeholder="Serientitel eintippen"
-            autoComplete="off" autoCorrect="off" spellCheck={false}
-            className="w-full min-h-[48px] px-4 rounded-xl bg-zinc-900 ring-1 ring-zinc-800 text-zinc-100 placeholder-zinc-600 outline-none focus:ring-2 focus:ring-amber-400/60"
-          />
-          <div className="mt-2 flex items-center gap-3">
+          {/* Tiles, optionally over a blurred poster that de-blurs with each hint */}
+          <div className="relative rounded-2xl overflow-hidden">
+            {hintBlur > 0 && show.thumb_url && (
+              <img src={show.thumb_url} alt="" aria-hidden="true"
+                className="absolute inset-0 w-full h-full object-cover opacity-40 transition-[filter] duration-500"
+                style={{ filter: `blur(${hintBlur}px)` }}
+                onError={(e) => { e.currentTarget.style.display = 'none'; }} />
+            )}
+            <div className="relative z-10 py-2">
+              <WuerfelInput slots={slots} lockedLetters={locked} onGuessChange={onGuess} onSubmit={submit} disabled={false} />
+            </div>
+          </div>
+          <div className="mt-3 flex items-center gap-3">
             <div className="flex-1 h-2 rounded-full bg-zinc-800 overflow-hidden">
               <div className="h-full rounded-full transition-[width] duration-200" style={{ width: `${meterPct}%`, background: meterColor }} />
             </div>
             <span className="text-xs tabular-nums font-medium" style={{ color: meterColor }}>{meterPct}%</span>
           </div>
-          <div className="grid grid-cols-3 gap-2 mt-3">
-            <button type="button" onClick={resolveWrong} className="col-span-1 min-h-[44px] rounded-xl bg-zinc-800 text-zinc-300 text-sm font-medium active:scale-[0.98] transition-transform">Überspringen</button>
+          <div className="grid grid-cols-4 gap-2 mt-3">
+            <button type="button" onClick={onHint} className="col-span-1 min-h-[44px] rounded-xl bg-zinc-800 text-amber-300 text-sm font-medium flex items-center justify-center gap-1 active:scale-[0.98] transition-transform">
+              <Lightbulb className="w-4 h-4" /> Tipp
+            </button>
+            <button type="button" onClick={resolveWrong} className="col-span-1 min-h-[44px] rounded-xl bg-zinc-800 text-zinc-300 text-sm font-medium active:scale-[0.98] transition-transform">Skip</button>
             <button type="button" onClick={submit} disabled={!guess.trim()} className="col-span-2 min-h-[44px] rounded-xl bg-amber-400 text-zinc-950 font-semibold flex items-center justify-center gap-2 disabled:opacity-40 active:scale-[0.98] transition-transform">
-              <Check className="w-4 h-4" /> Antwort prüfen
+              <Check className="w-4 h-4" /> Prüfen
             </button>
           </div>
         </div>
