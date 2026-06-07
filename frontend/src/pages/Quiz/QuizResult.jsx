@@ -164,10 +164,11 @@ export default function QuizResult({ roundId }) {
     setSaving(true);
     setSaveError(false);
     if (sessionless) {
-      // No server session/history to complete — just publish the shared leaderboard entries.
+      // No server session/history to complete — just publish the shared leaderboard entries, then
+      // land on the Bestenliste so the player sees their new entry (the round itself isn't persisted).
       await submitLeaderboard();
       clearRound(roundId);
-      navigate('/quiz/history');
+      navigate('/quiz/history?tab=board');
       return;
     }
     try {

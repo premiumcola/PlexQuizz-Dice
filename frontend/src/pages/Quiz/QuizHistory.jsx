@@ -111,7 +111,11 @@ export default function QuizHistory() {
   const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState('alle');
   const [sort, setSort] = useState(savedId ? 'beste' : 'neueste');
-  const [tab, setTab] = useState('rounds');
+  // Default to the rounds list, but honour ?tab=board so a just-finished sessionless round can land
+  // straight on the Bestenliste (where its freshly-submitted leaderboard entry shows).
+  const [tab, setTab] = useState(() => {
+    try { return new URLSearchParams(window.location.search).get('tab') === 'board' ? 'board' : 'rounds'; } catch { return 'rounds'; }
+  });
   const [confirmDel, setConfirmDel] = useState(null);
   const savedRef = useRef(null);
 
