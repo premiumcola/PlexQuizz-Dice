@@ -156,6 +156,16 @@ def primary_target(question_id: str) -> Optional[str]:
     return question["targets"][0]
 
 
+def cover_movie_id(question_id: str) -> Optional[str]:
+    """The question's movie id (library key) for the token-hidden blurred-cover hint. None if unknown.
+
+    Server-side only: the client references the cover by question id, so the answer key never leaks
+    into a URL. The poster is shown HEAVILY BLURRED through the hint flow (the mid-play HARD RULE —
+    the readable title is revealed only on a correct answer)."""
+    question = _get(question_id)
+    return question.get("correct_movie_id") if question is not None else None
+
+
 def reveal(question_id: str) -> Optional[Dict[str, Any]]:
     """The stored reveal (title + cover + links) for a question, regardless of correctness.
 

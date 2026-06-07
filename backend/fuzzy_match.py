@@ -17,9 +17,10 @@ logger = logging.getLogger(__name__)
 # Leading articles dropped during normalisation (de / en / fr / es / it).
 _ARTICLES = {"der", "die", "das", "the", "a", "an", "le", "la", "el", "il", "ein", "eine"}
 
-# Accept thresholds by difficulty (L4.1): default 0.80, easy 0.72, hard 0.86.
-_THRESHOLDS = {"easy": 0.72, "medium": 0.80, "hard": 0.86}
-DEFAULT_THRESHOLD = 0.80
+# Accept thresholds by difficulty. Raised (CC) so only a clearly-correct guess auto-wins — the live
+# meter no longer accepts a vague guess before the player has even seen the answer.
+_THRESHOLDS = {"easy": 0.85, "medium": 0.90, "hard": 0.94}
+DEFAULT_THRESHOLD = 0.90
 
 _YEAR_RE = re.compile(r"\b(19|20)\d{2}\b\s*$")
 _PUNCT_RE = re.compile(r"[^\w\s]", re.UNICODE)

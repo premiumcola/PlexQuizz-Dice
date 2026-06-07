@@ -9,6 +9,7 @@ from flask import Blueprint, jsonify, request
 import quiz_hints
 import theme_enrichment
 import theme_quiz
+from routes.library import thumb as _library_thumb
 
 bp = Blueprint("themes", __name__, url_prefix="/api/themes")
 
@@ -100,6 +101,16 @@ def answer():
     if result is None:
         return jsonify({"error": "Frage abgelaufen"}), 404
     return jsonify(result)
+
+
+@bp.get("/cover/<question_id>")
+def cover(question_id: str):
+    """Token-hidden poster for the blurred-cover hint, keyed by question id (the answer key never
+    appears in the URL). The frontend renders it heavily blurred during the hint flow."""
+    movie_id = theme_quiz.cover_movie_id(question_id)
+    if not movie_id:
+        return jsonify({"error": "Frage abgelaufen"}), 404
+    return _library_thumb(str(movie_id))
 
 
 @bp.post("/reveal")
