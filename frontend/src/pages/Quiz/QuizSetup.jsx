@@ -1,9 +1,10 @@
 import { useEffect, useState } from 'react';
-import { ArrowLeft, X, Camera, Play, Loader2, AlertCircle, Clapperboard, Music2, Tv, Shuffle, History, Dices, SlidersHorizontal, ChevronDown, ChevronUp } from 'lucide-react';
+import { X, Camera, Play, Loader2, AlertCircle, Clapperboard, Music2, Tv, Shuffle, History, Dices, SlidersHorizontal, ChevronDown, ChevronUp } from 'lucide-react';
 import { navigate } from '../../router';
 import { quizNewRound, quizUploadPhoto, quizGetConfig, quizPlayers, getThemeEligible, getSeriesEligible, getLibrary } from '../../api';
 import { saveRound } from './store';
 import { initAudio } from './audio';
+import AppHeader from '../../components/AppHeader';
 import MovieFilterPanel from '../../components/MovieFilterPanel';
 import { useMovieFilters, RUNTIME_MIN_BOUND, RUNTIME_MAX_BOUND } from '../../components/movieFilters';
 
@@ -141,17 +142,16 @@ export default function QuizSetup() {
   return (
     <div className="min-h-full bg-zinc-950 text-zinc-100">
       <div className="max-w-2xl mx-auto px-4 sm:px-6 lg:px-8 pt-6 sm:pt-10 pb-[calc(env(safe-area-inset-bottom)+5rem)] lg:pb-12">
-        <header className="mb-6 flex items-center gap-3">
-          <button type="button" onClick={() => navigate('/quiz')} aria-label="Zurück"
-            className="w-10 h-10 rounded-xl bg-zinc-900 ring-1 ring-zinc-800 flex items-center justify-center active:scale-95 transition-transform">
-            <ArrowLeft className="w-5 h-5 text-zinc-300" />
-          </button>
-          <h1 className="font-display-tight text-2xl lg:text-3xl tracking-tight leading-none flex-1 min-w-0">Neue Runde</h1>
-          <button type="button" onClick={() => navigate('/quiz/history')}
-            className="min-h-[44px] px-3 rounded-xl bg-zinc-900 ring-1 ring-zinc-800 text-sm text-zinc-300 flex items-center gap-1.5 shrink-0 active:scale-95 transition-transform">
-            <History className="w-4 h-4" /> Verlauf
-          </button>
-        </header>
+        <AppHeader
+          product="quiz"
+          rightSlot={(
+            <button type="button" onClick={() => navigate('/quiz/history')}
+              className="min-h-[44px] px-3 rounded-xl bg-zinc-900 ring-1 ring-zinc-800 text-sm text-zinc-300 flex items-center gap-1.5 shrink-0 active:scale-95 transition-transform">
+              <History className="w-4 h-4" /> Verlauf
+            </button>
+          )}
+        />
+        <div className="mb-6" />
 
         <div className="space-y-6">
           {/* Shared dice-style pre-filter (collapsed) — narrows the round's pool before starting. */}
