@@ -5,6 +5,8 @@ Endpoints (Blueprint url_prefix /api/series):
   GET  /api/series/coverage       - stats + the list of shows WITHOUT a theme
   GET  /api/series/theme/<rk>     - streams the theme audio (token hidden)
   GET  /api/series/thumb/<rk>     - proxies the show poster (token hidden)
+  POST /api/series/score          - live match meter for a typed guess {score, accepted}
+  POST /api/series/answer         - final answer {correct} + reveal ONLY when correct
   POST /api/series/rescan         - trigger a background rescan
 
 The Plex token stays server-side: it is attached as a query param to upstream Plex
@@ -18,9 +20,10 @@ from datetime import datetime, timezone
 from urllib.parse import urljoin
 
 import requests
-from flask import Blueprint, Response, jsonify, stream_with_context
+from flask import Blueprint, Response, jsonify, request, stream_with_context
 
 import series_cache
+import series_quiz
 import series_scan
 from services import plex_client, settings_store
 
@@ -203,6 +206,34 @@ def theme(rating_key: int):
     return Response(stream_with_context(generate()),
                     content_type=upstream.headers.get("Content-Type", "audio/mpeg"),
                     headers=headers)
+
+
+@bp.post("/score")
+def score():
+    """Live match meter for a typed series guess: {score 0-100, accepted}. No answer text."""
+    body = request.get_json(silent=True) or {}
+    try:
+        rk = int(body.get("ratingKey"))
+    except (TypeError, ValueError):
+        return jsonify({"error": "ratingKey fehlt"}), 400
+    result = series_quiz.score(rk, str(body.get("guess") or ""))
+    if result is None:
+        return jsonify({"error": "Serie nicht gefunden"}), 404
+    return jsonify(result)
+
+
+@bp.post("/answer")
+def answer():
+    """Final answer: {correct} plus 'reveal' ONLY when correct (HARD RULE, server-side)."""
+    body = request.get_json(silent=True) or {}
+    try:
+        rk = int(body.get("ratingKey"))
+    except (TypeError, ValueError):
+        return jsonify({"error": "ratingKey fehlt"}), 400
+    result = series_quiz.answer(rk, str(body.get("guess") or ""))
+    if result is None:
+        return jsonify({"error": "Serie nicht gefunden"}), 404
+    return jsonify(result)
 
 
 @bp.post("/rescan")
