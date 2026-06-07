@@ -22,18 +22,24 @@ const LAYERS = [
   { amp: 27, k1: 1.4, k2: 2.7, s1: 1.75, s2: 1.15, dir: -1, opacity: 0.28, base: 0.74 },
 ];
 
+function waveY(layer, t, x, amp, baseY) {
+  const px = (x / W) * Math.PI * 2;
+  return baseY
+    + amp * Math.sin(layer.k1 * px + layer.dir * layer.s1 * t)
+    + amp * 0.5 * Math.sin(layer.k2 * px - layer.dir * layer.s2 * t);
+}
+
 function buildPath(layer, t) {
   const breath = 0.975 + 0.075 * Math.sin((t * 2 * Math.PI) / 6); // 0.9 .. 1.05 over ~6s
   const amp = layer.amp * breath;
   const baseY = H * layer.base;
   let d = `M 0 ${H} L 0 ${baseY.toFixed(1)}`;
   for (let x = 0; x <= W; x += STEP) {
-    const px = (x / W) * Math.PI * 2;
-    const y = baseY
-      + amp * Math.sin(layer.k1 * px + layer.dir * layer.s1 * t)
-      + amp * 0.5 * Math.sin(layer.k2 * px - layer.dir * layer.s2 * t);
-    d += ` L ${x} ${y.toFixed(1)}`;
+    d += ` L ${x} ${waveY(layer, t, x, amp, baseY).toFixed(1)}`;
   }
+  // The loop lands on the last multiple of STEP <= W (e.g. 992); emit the exact right edge at
+  // x=W at its true wave height so the top reaches the wall before closing — no right-edge wedge.
+  d += ` L ${W} ${waveY(layer, t, W, amp, baseY).toFixed(1)}`;
   return `${d} L ${W} ${H} Z`;
 }
 
