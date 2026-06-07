@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Play, ChevronRight, Image as ImageIcon } from 'lucide-react';
+import { Play, ChevronRight, Image as ImageIcon, Settings as SettingsIcon } from 'lucide-react';
 import { navigate } from '../../router';
 import { getLibraryStatus, quizHistory } from '../../api';
 import { relativeDate, fmt } from './util';
@@ -88,6 +88,18 @@ export default function QuizHome() {
               <div className="text-sm opacity-80 mt-1">Wie gut kennt ihr eure Filme?</div>
             </div>
           </div>
+        </button>
+
+        <button
+          type="button"
+          onClick={() => navigate('/quiz/config')}
+          className="mt-4 w-full md:w-3/5 min-h-[44px] flex items-center justify-between gap-3 rounded-2xl bg-zinc-900/60 ring-1 ring-zinc-800 p-4 active:scale-[0.99] transition-transform"
+        >
+          <span className="flex items-center gap-3">
+            <SettingsIcon className="w-5 h-5 text-amber-400" />
+            <span className="font-medium text-zinc-100">Quiz-Einstellungen</span>
+          </span>
+          <ChevronRight className="w-4 h-4 text-zinc-500" />
         </button>
 
         {recent.length > 0 && (
