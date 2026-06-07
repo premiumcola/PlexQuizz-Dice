@@ -177,3 +177,15 @@ export function getThemeStatus() {
 export function startThemeEnrich(count = 200) {
   return postJson('/api/themes/enrich', { count });
 }
+export function getThemeEligible() {
+  return fetch('/api/themes/eligible').then(unwrap);
+}
+export function getThemeQuestion(difficulty = 'medium') {
+  return fetch(`/api/themes/question?difficulty=${encodeURIComponent(difficulty)}`).then(unwrap);
+}
+export function scoreThemeGuess(questionId, guess) {
+  return postJson('/api/themes/score', { question_id: questionId, guess });
+}
+export function answerThemeGuess(questionId, guess) {
+  return postJson('/api/themes/answer', { question_id: questionId, guess });
+}
