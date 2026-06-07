@@ -137,6 +137,14 @@ def answer(question_id: str, guess: str) -> Optional[Dict[str, Any]]:
     return {"correct": True, "reveal": question["reveal"]}
 
 
+def primary_target(question_id: str) -> Optional[str]:
+    """The question's primary answer title (for letter hints). None if unknown/expired."""
+    question = _get(question_id)
+    if question is None or not question.get("targets"):
+        return None
+    return question["targets"][0]
+
+
 def eligible_count() -> int:
     """Number of movies eligible for the theme quiz (have a streamable preview)."""
     return len(theme_enrichment.list_eligible())

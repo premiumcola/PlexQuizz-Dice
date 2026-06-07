@@ -3,6 +3,7 @@ from __future__ import annotations
 
 from flask import Blueprint, jsonify, request
 
+import quiz_hints
 import theme_enrichment
 import theme_quiz
 
@@ -70,3 +71,17 @@ def answer():
     if result is None:
         return jsonify({"error": "Frage abgelaufen"}), 404
     return jsonify(result)
+
+
+@bp.post("/hint")
+def hint():
+    """POST /api/themes/hint — progressive letter hint for the question's primary title.
+
+    Returns {length, revealed:[{index,char}]}; never the full title as one field."""
+    body = request.get_json(silent=True) or {}
+    target = theme_quiz.primary_target(str(body.get("question_id") or ""))
+    if not target:
+        return jsonify({"error": "Frage abgelaufen"}), 404
+    level = body.get("level", 1)
+    level = int(level) if isinstance(level, (int, float)) and not isinstance(level, bool) else 1
+    return jsonify(quiz_hints.reveal_letters(target, max(1, level)))
