@@ -183,6 +183,9 @@ export function startThemeEnrich(count = 200) {
 export function retryThemePreviews(count = 200) {
   return postJson('/api/themes/retry-previews', { count });
 }
+export function getThemeSample() {
+  return fetch('/api/themes/sample').then(unwrap);
+}
 export function getThemeEligible() {
   return fetch('/api/themes/eligible').then(unwrap);
 }
