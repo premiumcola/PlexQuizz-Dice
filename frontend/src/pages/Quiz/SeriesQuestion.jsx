@@ -75,6 +75,7 @@ export default function SeriesQuestion({ show, soundOn = true, paused = false, o
     if (soundOn) playSound('correct');
     const info = {
       correct: true,
+      mode: 'series',
       hints: hintLevel,
       title: rev?.title || show.title || null,
       year: rev?.year ?? show.year ?? null,
@@ -92,6 +93,7 @@ export default function SeriesQuestion({ show, soundOn = true, paused = false, o
     // The series title is known client-side (from /eligible) → capture it for the Auflösung.
     const info = {
       correct: false,
+      mode: 'series',
       hints: hintLevel,
       title: show.title || null,
       year: show.year ?? null,

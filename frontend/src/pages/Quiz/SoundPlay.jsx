@@ -71,6 +71,7 @@ function NormalCard({ q, onResolved }) {
     const correct = id === q.correct_option_id;
     const info = {
       correct,
+      mode: 'normal',
       hints: 0,
       title: q.movie_title || null,
       year: q.movie_year ?? null,
@@ -151,10 +152,7 @@ export default function SoundPlay({ roundId }) {
 
   // Per-question results, collected client-side for the shared result + Auflösung (no server session).
   const resultsRef = useRef([]);
-  const currentRef = useRef(null);
   const finishedRef = useRef(false);
-
-  useEffect(() => { currentRef.current = current; }, [current]);
 
   useEffect(() => { preloadSounds(); setSoundEnabled(soundOn); initAudio(); }, [soundOn]);
 
@@ -222,9 +220,11 @@ export default function SoundPlay({ roundId }) {
     return () => { alive = false; };
   }, [step, plan, normalQs, difficulty, filters]);
 
+  // Each question component reports its own mode in `info`, so the recorded result never depends on
+  // render timing (no stale-ref race when an async reveal advances the step).
   const onResolved = useCallback((wasCorrect, info) => {
     resultsRef.current.push({
-      mode: currentRef.current?.type || 'sound',
+      mode: info?.mode || 'sound',
       correct: !!wasCorrect,
       hints: info?.hints || 0,
       title: info?.title || null,

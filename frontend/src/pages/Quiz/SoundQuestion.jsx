@@ -45,7 +45,6 @@ export default function SoundQuestion({ question, soundOn = true, paused = false
   const debounceRef = useRef(null);
   const advanceRef = useRef(null);
   const resolvedRef = useRef(false);
-  const capturedRef = useRef(null); // correct answer captured for the post-round Auflösung
 
   // Fresh question → reset everything, tear down audio, and load the tile skeleton (level-0 hint).
   useEffect(() => {
@@ -59,7 +58,6 @@ export default function SoundQuestion({ question, soundOn = true, paused = false
     setSlots(null);
     setLocked({});
     setHintLevel(0);
-    capturedRef.current = null;
     let alive = true;
     themeHint(question.question_id, 0)
       .then((resp) => { if (alive) setSlots(slotsFromSkeleton(resp)); })
@@ -109,6 +107,7 @@ export default function SoundQuestion({ question, soundOn = true, paused = false
     if (soundOn) playSound('correct');
     const info = {
       correct: true,
+      mode: 'sound',
       hints: hintLevel,
       title: rev?.title || null,
       year: null,
@@ -124,21 +123,21 @@ export default function SoundQuestion({ question, soundOn = true, paused = false
     stopAudio();
     setResolved('wrong');
     if (soundOn) playSound('loser');
-    // Capture the correct title+cover for the post-round Auflösung. NOT shown mid-round (HARD RULE).
-    const fallback = { correct: false, hints: hintLevel, title: null, year: null, cover_url: null, plex_url: null };
+    // Capture the correct title+cover for the post-round Auflösung (NOT shown mid-round — HARD RULE).
+    // Schedule the advance only AFTER the reveal settles, so the captured answer is never lost.
+    const fallback = { correct: false, mode: 'sound', hints: hintLevel, title: null, year: null, cover_url: null, plex_url: null };
+    const advance = (info) => { advanceRef.current = setTimeout(() => onResolved(false, info), WRONG_MS); };
     getThemeReveal(question.question_id)
-      .then((d) => {
-        capturedRef.current = {
-          correct: false,
-          hints: hintLevel,
-          title: d.reveal?.title || null,
-          year: null,
-          cover_url: d.reveal?.ratingKey ? `/api/library/thumb/${d.reveal.ratingKey}` : null,
-          plex_url: d.reveal?.plex_url || null,
-        };
-      })
-      .catch(() => { capturedRef.current = fallback; });
-    advanceRef.current = setTimeout(() => onResolved(false, capturedRef.current || fallback), WRONG_MS);
+      .then((d) => advance({
+        correct: false,
+        mode: 'sound',
+        hints: hintLevel,
+        title: d.reveal?.title || null,
+        year: null,
+        cover_url: d.reveal?.ratingKey ? `/api/library/thumb/${d.reveal.ratingKey}` : null,
+        plex_url: d.reveal?.plex_url || null,
+      }))
+      .catch(() => advance(fallback));
   };
 
   const onGuess = (value) => {
