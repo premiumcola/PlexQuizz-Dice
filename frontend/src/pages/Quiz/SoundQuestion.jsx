@@ -27,7 +27,7 @@ function lockedFromHint(resp, slots) {
 // reveals NOTHING (the server already withholds it) and advances.
 
 const DEBOUNCE_MS = 400;
-const REVEAL_MS = 4000; // lingers so the full-song links are tappable
+const REVEAL_MS = 6000; // big reveal — hold it long enough to see the cover + tap the links
 const WRONG_MS = 1400;
 
 export default function SoundQuestion({ question, soundOn = true, paused = false, onResolved }) {
@@ -174,13 +174,14 @@ export default function SoundQuestion({ question, soundOn = true, paused = false
     }
   };
 
-  // Next hint: clears the typed guess, KEEPS revealed letters, ADDS the next batch (WuerfelInput
-  // resets its typed state whenever `locked` changes).
+  // Hint 1 fades in the (very blurred) cover only — no letters yet; letters start at hint 2 and
+  // accumulate. Each hint clears the typed guess (WuerfelInput resets on `locked` change), keeps the
+  // revealed letters, adds the next batch, and de-blurs the cover a little.
   const onHint = async () => {
     if (resolvedRef.current || !slots) return;
     const lvl = hintLevel + 1;
     try {
-      const resp = await themeHint(question.question_id, lvl);
+      const resp = await themeHint(question.question_id, Math.max(0, lvl - 1));
       setLocked(lockedFromHint(resp, slots));
       setHintLevel(lvl);
       setMeter({ score: 0, accepted: false });
@@ -194,6 +195,10 @@ export default function SoundQuestion({ question, soundOn = true, paused = false
     : null;
 
   const cover = resolved === 'correct' && reveal?.ratingKey ? `/api/library/thumb/${reveal.ratingKey}` : null;
+  // Blurred-cover hint: the answer poster (token-hidden by question id) fades in from hint 1 and
+  // de-blurs a little per hint, never fully sharp until solved.
+  const hintCover = hintLevel > 0 && resolved == null ? `/api/themes/cover/${question.question_id}` : null;
+  const hintBlur = Math.max(6, 26 - hintLevel * 6);
 
   return (
     <div className="flex flex-col h-full min-h-0">
@@ -209,29 +214,36 @@ export default function SoundQuestion({ question, soundOn = true, paused = false
         onEnded={() => setPlaying(false)}
       />
 
-      {/* Consistent question header — cover appears here on a correct answer (V2.3/V2.4) */}
+      {/* Consistent question header */}
       <div className="shrink-0 flex items-center gap-3 mb-3 min-h-[2rem]">
-        {cover && (
-          <img src={cover} alt="" className="w-11 h-16 rounded-lg object-cover shrink-0"
-            style={{ boxShadow: '0 0 14px rgba(245,166,35,0.35)' }}
-            onError={(e) => { e.currentTarget.style.display = 'none'; }} />
-        )}
         <h2 className="text-lg font-semibold text-zinc-100 leading-tight">Welcher Film läuft hier?</h2>
       </div>
 
-      {/* Audio stage: calm waves at the bottom, big Play/Pause centered */}
+      {/* Audio stage: calm waves + big Play/Pause; on a correct answer the cover fills it BIG. */}
       <div className="relative flex-1 min-h-0 rounded-2xl bg-zinc-900 overflow-hidden flex items-center justify-center">
-        <WaveStage playing={playing} />
-        <div className="relative z-10 flex flex-col items-center gap-4">
-          <button
-            type="button"
-            onClick={togglePlay}
-            aria-label={playing ? 'Pause' : 'Abspielen'}
-            className="w-20 h-20 rounded-full bg-[#f5a623] text-zinc-950 flex items-center justify-center shadow-lg shadow-amber-400/30 active:scale-95 transition-transform"
-          >
-            {playing ? <Pause className="w-9 h-9 fill-zinc-950" /> : <Play className="w-9 h-9 fill-zinc-950 ml-1" />}
-          </button>
-        </div>
+        {cover ? (
+          <img
+            src={cover}
+            alt=""
+            className="max-h-full max-w-full object-contain rounded-xl"
+            style={{ boxShadow: '0 0 44px rgba(245,166,35,0.4)' }}
+            onError={(e) => { e.currentTarget.style.display = 'none'; }}
+          />
+        ) : (
+          <>
+            <WaveStage playing={playing} />
+            <div className="relative z-10 flex flex-col items-center gap-4">
+              <button
+                type="button"
+                onClick={togglePlay}
+                aria-label={playing ? 'Pause' : 'Abspielen'}
+                className="w-20 h-20 rounded-full bg-[#f5a623] text-zinc-950 flex items-center justify-center shadow-lg shadow-amber-400/30 active:scale-95 transition-transform"
+              >
+                {playing ? <Pause className="w-9 h-9 fill-zinc-950" /> : <Play className="w-9 h-9 fill-zinc-950 ml-1" />}
+              </button>
+            </div>
+          </>
+        )}
       </div>
 
       {/* 30s scrub bar */}
@@ -295,7 +307,17 @@ export default function SoundQuestion({ question, soundOn = true, paused = false
       ) : (
         <div className="mt-3">
           {slots && slots.length > 0 ? (
-            <WuerfelInput slots={slots} lockedLetters={locked} onGuessChange={onGuess} onSubmit={submit} disabled={false} />
+            <div className="relative rounded-2xl overflow-hidden">
+              {hintCover && (
+                <img src={hintCover} alt="" aria-hidden="true"
+                  className="absolute inset-0 w-full h-full object-cover opacity-50 transition-[filter] duration-500"
+                  style={{ filter: `blur(${hintBlur}px)` }}
+                  onError={(e) => { e.currentTarget.style.display = 'none'; }} />
+              )}
+              <div className="relative z-10 py-2">
+                <WuerfelInput slots={slots} lockedLetters={locked} onGuessChange={onGuess} onSubmit={submit} disabled={false} />
+              </div>
+            </div>
           ) : (
             <div className="h-11 flex items-center justify-center text-zinc-600 text-sm">…</div>
           )}
