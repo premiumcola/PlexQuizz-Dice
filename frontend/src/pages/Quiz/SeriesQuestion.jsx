@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { Play, Pause, RotateCcw, Check, X, ExternalLink, Lightbulb } from 'lucide-react';
+import { Play, Pause, Check, X, ExternalLink, Lightbulb } from 'lucide-react';
 import { scoreSeriesGuess, answerSeriesGuess, seriesHint } from '../../api';
 import { playSound } from './audio';
 import WaveStage from './WaveStage';
@@ -63,7 +63,6 @@ export default function SeriesQuestion({ show, soundOn = true, onResolved }) {
     else { a.pause(); setPlaying(false); }
   };
 
-  const replay = () => { const a = audioRef.current; if (a) { a.currentTime = 0; a.play().then(() => setPlaying(true)).catch(() => {}); } };
   const seek = (frac) => { const a = audioRef.current; if (a && a.duration) a.currentTime = frac * a.duration; };
 
   const resolveCorrect = (rev) => {
@@ -160,9 +159,6 @@ export default function SeriesQuestion({ show, soundOn = true, onResolved }) {
             className="w-20 h-20 rounded-full bg-[#f5a623] text-zinc-950 flex items-center justify-center shadow-lg shadow-amber-400/30 active:scale-95 transition-transform"
           >
             {playing ? <Pause className="w-9 h-9 fill-zinc-950" /> : <Play className="w-9 h-9 fill-zinc-950 ml-1" />}
-          </button>
-          <button type="button" onClick={replay} className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl bg-zinc-800/80 text-zinc-200 text-sm min-h-[44px] active:scale-95 transition-transform">
-            <RotateCcw className="w-4 h-4" /> Nochmal hören
           </button>
         </div>
       </div>
