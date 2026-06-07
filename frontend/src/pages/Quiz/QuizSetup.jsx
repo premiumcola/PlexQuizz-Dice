@@ -1,16 +1,17 @@
 import { useEffect, useState } from 'react';
-import { ArrowLeft, X, Camera, Play, Loader2, AlertCircle, Clapperboard, Music2, Shuffle } from 'lucide-react';
+import { ArrowLeft, X, Camera, Play, Loader2, AlertCircle, Clapperboard, Music2, Tv, Shuffle } from 'lucide-react';
 import { navigate } from '../../router';
-import { quizNewRound, quizUploadPhoto, quizGetConfig, quizPlayers, getThemeEligible } from '../../api';
+import { quizNewRound, quizUploadPhoto, quizGetConfig, quizPlayers, getThemeEligible, getSeriesEligible } from '../../api';
 import { saveRound } from './store';
 import { initAudio } from './audio';
 
 const SIZES = [20, 50, 100];
-const MIN_THEMES = 8; // Sound / Mixed need at least this many eligible film-themes
+const MIN_POOL = 8; // Sound / Series / Mixed need at least this many eligible items
 const MODES = [
-  { v: 'normal', label: 'Nur normale Fragen', sub: 'Bild- und Wissensfragen', Icon: Clapperboard, needsThemes: false },
-  { v: 'sound', label: 'Nur Sound', sub: 'Errate Filme an ihrer Titelmelodie', Icon: Music2, needsThemes: true },
-  { v: 'mixed', label: 'Mixed', sub: 'Normale Fragen + Sound gemischt', Icon: Shuffle, needsThemes: true },
+  { v: 'normal', label: 'Nur normale Fragen', sub: 'Bild- und Wissensfragen', Icon: Clapperboard, need: 'none' },
+  { v: 'sound', label: 'Nur Sound', sub: 'Errate Filme an ihrer Titelmelodie', Icon: Music2, need: 'themes' },
+  { v: 'series', label: 'Serien-Themes', sub: 'Errate Serien an ihrer Titelmelodie', Icon: Tv, need: 'series' },
+  { v: 'mixed', label: 'Mixed', sub: 'Normale Fragen + Sound + Serien', Icon: Shuffle, need: 'either' },
 ];
 const DIFFS = [
   { v: 'easy', label: '🟢 Leicht' },
@@ -28,6 +29,7 @@ export default function QuizSetup() {
   const [difficulty, setDifficulty] = useState('medium');
   const [mode, setMode] = useState('normal');
   const [themeCount, setThemeCount] = useState(null); // null until /eligible resolves
+  const [seriesCount, setSeriesCount] = useState(null);
   const [photoPreview, setPhotoPreview] = useState(null);
   const [photoId, setPhotoId] = useState(null);
   const [uploading, setUploading] = useState(false);
@@ -43,9 +45,17 @@ export default function QuizSetup() {
       .catch(() => {});
     quizPlayers().then((d) => setRoster(d.players || [])).catch(() => {});
     getThemeEligible().then((d) => setThemeCount(d.count || 0)).catch(() => setThemeCount(0));
+    getSeriesEligible().then((d) => setSeriesCount(d.count || 0)).catch(() => setSeriesCount(0));
   }, []);
 
-  const themesReady = (themeCount ?? 0) >= MIN_THEMES;
+  const themesReady = (themeCount ?? 0) >= MIN_POOL;
+  const seriesReady = (seriesCount ?? 0) >= MIN_POOL;
+  const isReady = (need) => {
+    if (need === 'themes') return themesReady;
+    if (need === 'series') return seriesReady;
+    if (need === 'either') return themesReady || seriesReady;
+    return true;
+  };
 
   const addPlayer = () => {
     const p = playerInput.trim();
@@ -76,10 +86,10 @@ export default function QuizSetup() {
     setError('');
     const setup = { name: name.trim(), playerNames: players, photoId };
     try {
-      if (mode === 'sound') {
-        // Pure client-sequenced sound round (no server session needed).
-        const rid = `s${Date.now()}`;
-        saveRound(rid, { mode: 'sound', difficulty, size, sound_enabled: true, setup });
+      if (mode === 'sound' || mode === 'series') {
+        // Pure client-sequenced sound/series round (no server session needed).
+        const rid = `${mode === 'series' ? 'r' : 's'}${Date.now()}`;
+        saveRound(rid, { mode, difficulty, size, sound_enabled: true, setup });
         navigate(`/quiz/sound/${rid}`);
         return;
       }
@@ -108,9 +118,9 @@ export default function QuizSetup() {
         <div className="space-y-6">
           <div>
             <label className="text-sm font-medium text-zinc-200 uppercase tracking-wide mb-2 block">Modus</label>
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
-              {MODES.map(({ v, label, sub, Icon, needsThemes }) => {
-                const disabled = needsThemes && !themesReady;
+            <div className="grid grid-cols-2 gap-2">
+              {MODES.map(({ v, label, sub, Icon, need }) => {
+                const disabled = !isReady(need);
                 const active = mode === v;
                 return (
                   <button
@@ -129,11 +139,15 @@ export default function QuizSetup() {
                 );
               })}
             </div>
-            {!themesReady && (
-              <p className="text-xs text-zinc-500 mt-2">
-                Sound &amp; Mixed brauchen mind. {MIN_THEMES} analysierte Film-Themes
-                {themeCount != null ? ` (aktuell ${themeCount})` : ''}.
-              </p>
+            {(!themesReady || !seriesReady) && (
+              <div className="text-xs text-zinc-500 mt-2 space-y-0.5">
+                {!themesReady && (
+                  <p>Sound: mind. {MIN_POOL} analysierte Film-Themes{themeCount != null ? ` (aktuell ${themeCount})` : ''}.</p>
+                )}
+                {!seriesReady && (
+                  <p>Serien-Themes: mind. {MIN_POOL} Serien mit Titelmelodie{seriesCount != null ? ` (aktuell ${seriesCount})` : ''}.</p>
+                )}
+              </div>
             )}
           </div>
 
