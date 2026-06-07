@@ -5,6 +5,7 @@ Endpoints (Blueprint url_prefix /api/series):
   GET  /api/series/coverage       - stats + the list of shows WITHOUT a theme
   GET  /api/series/theme/<rk>     - streams the theme audio (token hidden)
   GET  /api/series/thumb/<rk>     - proxies the show poster (token hidden)
+  GET  /api/series/sample         - a random themed show to hear in Settings ({ratingKey,title,year})
   POST /api/series/score          - live match meter for a typed guess {score, accepted}
   POST /api/series/answer         - final answer {correct} + reveal ONLY when correct
   POST /api/series/rescan         - trigger a background rescan
@@ -234,6 +235,15 @@ def answer():
     result = series_quiz.answer(rk, str(body.get("guess") or ""))
     if result is None:
         return jsonify({"error": "Serie nicht gefunden"}), 404
+    return jsonify(result)
+
+
+@bp.get("/sample")
+def sample():
+    """A random themed show to hear in Settings ({ratingKey,title,year}). 404 if none eligible."""
+    result = series_quiz.random_sample()
+    if result is None:
+        return jsonify({"error": "Keine Hörprobe vorhanden"}), 404
     return jsonify(result)
 
 

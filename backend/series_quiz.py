@@ -8,6 +8,7 @@ returned ONLY for a correct guess (HARD RULE); a wrong guess gets {"correct": Fa
 from __future__ import annotations
 
 import logging
+import random
 import re
 from typing import Any, Dict, Optional
 from urllib.parse import quote
@@ -59,6 +60,18 @@ def title_for(rating_key: int) -> Optional[str]:
     """The show's title (for letter hints). None if the show is unknown."""
     show = _find_show(rating_key)
     return show.get("title") if show else None
+
+
+def random_sample() -> Optional[Dict[str, Any]]:
+    """A random themed show for the Settings 'play a sample' diagnostic. None if none eligible."""
+    shows = [
+        s for s in series_cache.load_cache().get("shows", [])
+        if s.get("has_theme") and s.get("ratingKey") is not None
+    ]
+    if not shows:
+        return None
+    show = random.choice(shows)
+    return {"ratingKey": show.get("ratingKey"), "title": show.get("title"), "year": show.get("year")}
 
 
 def score(rating_key: int, guess: str) -> Optional[Dict[str, Any]]:
