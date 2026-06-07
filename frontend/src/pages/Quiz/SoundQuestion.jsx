@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { Play, Pause, Check, X, Music2, ExternalLink, Lightbulb } from 'lucide-react';
-import { scoreThemeGuess, answerThemeGuess, themeHint } from '../../api';
+import { scoreThemeGuess, answerThemeGuess, themeHint, getThemeReveal } from '../../api';
 import { plexAppUrl } from '../../lib/plexLink';
 import { playSound } from './audio';
 import WaveStage from './WaveStage';
@@ -30,7 +30,7 @@ const DEBOUNCE_MS = 400;
 const REVEAL_MS = 4000; // lingers so the full-song links are tappable
 const WRONG_MS = 1400;
 
-export default function SoundQuestion({ question, soundOn = true, onResolved }) {
+export default function SoundQuestion({ question, soundOn = true, paused = false, onResolved }) {
   const [playing, setPlaying] = useState(false);
   const [progress, setProgress] = useState(0); // 0..1
   const [guess, setGuess] = useState('');
@@ -45,6 +45,7 @@ export default function SoundQuestion({ question, soundOn = true, onResolved }) 
   const debounceRef = useRef(null);
   const advanceRef = useRef(null);
   const resolvedRef = useRef(false);
+  const capturedRef = useRef(null); // correct answer captured for the post-round Auflösung
 
   // Fresh question → reset everything, tear down audio, and load the tile skeleton (level-0 hint).
   useEffect(() => {
@@ -58,6 +59,7 @@ export default function SoundQuestion({ question, soundOn = true, onResolved }) 
     setSlots(null);
     setLocked({});
     setHintLevel(0);
+    capturedRef.current = null;
     let alive = true;
     themeHint(question.question_id, 0)
       .then((resp) => { if (alive) setSlots(slotsFromSkeleton(resp)); })
@@ -76,6 +78,11 @@ export default function SoundQuestion({ question, soundOn = true, onResolved }) 
     if (a) a.pause();
     setPlaying(false);
   };
+
+  // Parent pause (quit overlay): stop the preview; the user re-taps Play to resume.
+  useEffect(() => {
+    if (paused) stopAudio();
+  }, [paused]);
 
   const togglePlay = () => {
     const a = audioRef.current;
@@ -100,7 +107,15 @@ export default function SoundQuestion({ question, soundOn = true, onResolved }) 
     setReveal(rev);
     setResolved('correct');
     if (soundOn) playSound('correct');
-    advanceRef.current = setTimeout(() => onResolved(true), REVEAL_MS);
+    const info = {
+      correct: true,
+      hints: hintLevel,
+      title: rev?.title || null,
+      year: null,
+      cover_url: rev?.ratingKey ? `/api/library/thumb/${rev.ratingKey}` : null,
+      plex_url: rev?.plex_url || null,
+    };
+    advanceRef.current = setTimeout(() => onResolved(true, info), REVEAL_MS);
   };
 
   const resolveWrong = () => {
@@ -109,7 +124,21 @@ export default function SoundQuestion({ question, soundOn = true, onResolved }) 
     stopAudio();
     setResolved('wrong');
     if (soundOn) playSound('loser');
-    advanceRef.current = setTimeout(() => onResolved(false), WRONG_MS);
+    // Capture the correct title+cover for the post-round Auflösung. NOT shown mid-round (HARD RULE).
+    const fallback = { correct: false, hints: hintLevel, title: null, year: null, cover_url: null, plex_url: null };
+    getThemeReveal(question.question_id)
+      .then((d) => {
+        capturedRef.current = {
+          correct: false,
+          hints: hintLevel,
+          title: d.reveal?.title || null,
+          year: null,
+          cover_url: d.reveal?.ratingKey ? `/api/library/thumb/${d.reveal.ratingKey}` : null,
+          plex_url: d.reveal?.plex_url || null,
+        };
+      })
+      .catch(() => { capturedRef.current = fallback; });
+    advanceRef.current = setTimeout(() => onResolved(false, capturedRef.current || fallback), WRONG_MS);
   };
 
   const onGuess = (value) => {

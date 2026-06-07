@@ -25,7 +25,7 @@ const DEBOUNCE_MS = 400;
 const REVEAL_MS = 4000;
 const WRONG_MS = 1400;
 
-export default function SeriesQuestion({ show, soundOn = true, onResolved }) {
+export default function SeriesQuestion({ show, soundOn = true, paused = false, onResolved }) {
   const [playing, setPlaying] = useState(false);
   const [progress, setProgress] = useState(0);
   const [guess, setGuess] = useState('');
@@ -56,6 +56,9 @@ export default function SeriesQuestion({ show, soundOn = true, onResolved }) {
 
   const stopAudio = () => { const a = audioRef.current; if (a) a.pause(); setPlaying(false); };
 
+  // Parent pause (quit overlay): stop the theme; the user re-taps Play to resume.
+  useEffect(() => { if (paused) stopAudio(); }, [paused]);
+
   const togglePlay = () => {
     const a = audioRef.current;
     if (!a) return;
@@ -70,7 +73,15 @@ export default function SeriesQuestion({ show, soundOn = true, onResolved }) {
     resolvedRef.current = true;
     stopAudio(); setReveal(rev); setResolved('correct');
     if (soundOn) playSound('correct');
-    advanceRef.current = setTimeout(() => onResolved(true), REVEAL_MS);
+    const info = {
+      correct: true,
+      hints: hintLevel,
+      title: rev?.title || show.title || null,
+      year: rev?.year ?? show.year ?? null,
+      cover_url: rev?.poster_url || show.thumb_url || null,
+      plex_url: rev?.plex_url || null,
+    };
+    advanceRef.current = setTimeout(() => onResolved(true, info), REVEAL_MS);
   };
 
   const resolveWrong = () => {
@@ -78,7 +89,16 @@ export default function SeriesQuestion({ show, soundOn = true, onResolved }) {
     resolvedRef.current = true;
     stopAudio(); setResolved('wrong');
     if (soundOn) playSound('loser');
-    advanceRef.current = setTimeout(() => onResolved(false), WRONG_MS);
+    // The series title is known client-side (from /eligible) → capture it for the Auflösung.
+    const info = {
+      correct: false,
+      hints: hintLevel,
+      title: show.title || null,
+      year: show.year ?? null,
+      cover_url: show.thumb_url || null,
+      plex_url: null,
+    };
+    advanceRef.current = setTimeout(() => onResolved(false, info), WRONG_MS);
   };
 
   const onGuess = (value) => {

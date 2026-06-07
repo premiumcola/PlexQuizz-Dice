@@ -1,8 +1,8 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { LogOut, Loader2, Trophy, Music4 } from 'lucide-react';
+import { LogOut, Loader2, Music4, Play, Pause } from 'lucide-react';
 import { navigate } from '../../router';
 import { getThemeQuestion, getThemeEligible, getSeriesEligible } from '../../api';
-import { loadRound, clearRound } from './store';
+import { loadRound, saveResults } from './store';
 import { initAudio, preloadSounds, setSoundEnabled } from './audio';
 import SoundQuestion from './SoundQuestion';
 import SeriesQuestion from './SeriesQuestion';
@@ -15,6 +15,17 @@ import SeriesQuestion from './SeriesQuestion';
 
 const REVEAL_MS = 1800;
 const MIN_POOL = 8;
+const HINT_PENALTY = 20;
+
+// Shared, mode-independent score: 100 per correct answer, minus a small per-question hint penalty
+// (-20 per hint used), floored at 0 per question. Same 0..size*100 scale as the normal mode's
+// QuizResult (max = size*100), so every mode is comparable on the shared leaderboard.
+function scoreResults(results) {
+  return results.reduce(
+    (sum, r) => sum + (r.correct ? Math.max(0, 100 - HINT_PENALTY * (r.hints || 0)) : 0),
+    0,
+  );
+}
 
 function shuffle(arr) {
   const a = [...arr];
@@ -58,7 +69,15 @@ function NormalCard({ q, onResolved }) {
     setLocked(true);
     setChosen(id);
     const correct = id === q.correct_option_id;
-    advanceRef.current = setTimeout(() => onResolved(correct), REVEAL_MS);
+    const info = {
+      correct,
+      hints: 0,
+      title: q.movie_title || null,
+      year: q.movie_year ?? null,
+      cover_url: q.movie_key ? `/api/library/thumb/${q.movie_key}` : null,
+      plex_url: null,
+    };
+    advanceRef.current = setTimeout(() => onResolved(correct, info), REVEAL_MS);
   };
 
   const stem = q.stem || {};
@@ -127,6 +146,14 @@ export default function SoundPlay({ roundId }) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [correct, setCorrect] = useState(0);
+  const [paused, setPaused] = useState(false);
+
+  // Per-question results, collected client-side for the shared result + Auflösung (no server session).
+  const resultsRef = useRef([]);
+  const currentRef = useRef(null);
+  const finishedRef = useRef(false);
+
+  useEffect(() => { currentRef.current = current; }, [current]);
 
   useEffect(() => { preloadSounds(); setSoundEnabled(soundOn); initAudio(); }, [soundOn]);
 
@@ -194,12 +221,52 @@ export default function SoundPlay({ roundId }) {
     return () => { alive = false; };
   }, [step, plan, normalQs, difficulty]);
 
-  const onResolved = useCallback((wasCorrect) => {
+  const onResolved = useCallback((wasCorrect, info) => {
+    resultsRef.current.push({
+      mode: currentRef.current?.type || 'sound',
+      correct: !!wasCorrect,
+      hints: info?.hints || 0,
+      title: info?.title || null,
+      year: info?.year ?? null,
+      cover_url: info?.cover_url || null,
+      plex_url: info?.plex_url || null,
+    });
     if (wasCorrect) setCorrect((c) => c + 1);
     setStep((s) => s + 1);
   }, []);
 
-  const exit = () => { clearRound(roundId); navigate('/quiz'); };
+  // End the round (all done OR "Beenden & Auflösung"): assemble the shared result + per-question
+  // Auflösung and hand off to the SAME result overview the normal mode uses. The leaderboard entry
+  // is submitted from QuizResult.save (mirrors the normal mode), so quitting and finishing match.
+  const finish = useCallback(() => {
+    if (finishedRef.current) return;
+    finishedRef.current = true;
+    const played = resultsRef.current;
+    const correctCount = played.filter((r) => r.correct).length;
+    const answers = played.map((r) => ({ mode: r.mode, correct: r.correct }));
+    const solutions = played.map((r) => ({
+      title: r.title || 'Nicht erkannt',
+      year: r.year,
+      cover_url: r.cover_url,
+      plex_url: r.plex_url,
+      correct: r.correct,
+    }));
+    saveResults(roundId, {
+      score: scoreResults(played),
+      size: played.length,
+      correct: correctCount,
+      sessionless: true,
+      mode,
+      answers,
+      solutions,
+    });
+    navigate(`/quiz/result/${roundId}`);
+  }, [roundId, mode]);
+
+  // Natural end: every planned question resolved → straight to the shared result overview.
+  useEffect(() => {
+    if (plan && plan.length > 0 && step >= plan.length) finish();
+  }, [plan, step, finish]);
 
   if (!round) {
     return (
@@ -223,25 +290,26 @@ export default function SoundPlay({ roundId }) {
     );
   }
 
-  if (step >= plan.length) {
-    const total = plan.length;
+  if (plan.length === 0) {
     return (
-      <div className="h-[100dvh] bg-zinc-950 text-zinc-100 flex flex-col items-center justify-center gap-5 px-6 text-center">
-        <Trophy className="w-14 h-14 text-amber-400" />
-        <div>
-          <div className="text-4xl font-bold tabular-nums">{correct} / {total}</div>
-          <div className="text-zinc-400 mt-1">richtig erkannt</div>
-        </div>
-        <div className="flex gap-3 mt-2">
-          <button type="button" onClick={() => navigate('/quiz/setup')} className="px-5 py-3 rounded-xl bg-amber-400 text-zinc-950 font-semibold">Nochmal</button>
-          <button type="button" onClick={exit} className="px-5 py-3 rounded-xl bg-zinc-800 text-zinc-200 font-semibold">Zum Quiz</button>
-        </div>
+      <div className="h-[100dvh] bg-zinc-950 text-zinc-100 flex flex-col items-center justify-center gap-4 px-6 text-center">
+        <p className="text-zinc-400">Keine Fragen für diese Runde verfügbar.</p>
+        <button type="button" onClick={() => navigate('/quiz/setup')} className="px-5 py-3 rounded-xl bg-amber-400 text-zinc-950 font-semibold">Zurück zur Auswahl</button>
+      </div>
+    );
+  }
+
+  if (step >= plan.length) {
+    // finish() routes to the shared result overview from an effect; brief loader while it navigates.
+    return (
+      <div className="h-[100dvh] bg-zinc-950 text-zinc-100 flex items-center justify-center">
+        <Loader2 className="w-6 h-6 animate-spin text-zinc-500" />
       </div>
     );
   }
 
   return (
-    <div className="h-[100dvh] flex flex-col overflow-hidden bg-zinc-950 text-zinc-100">
+    <div className="relative h-[100dvh] flex flex-col overflow-hidden bg-zinc-950 text-zinc-100">
       <div className="shrink-0 flex items-center gap-3 px-4 pt-[max(0.6rem,env(safe-area-inset-top))] pb-2">
         <div className="flex items-center gap-2">
           <Music4 className="w-5 h-5 text-amber-400" />
@@ -250,8 +318,8 @@ export default function SoundPlay({ roundId }) {
         <div className="flex-1 text-right text-sm text-zinc-400 tabular-nums">
           <span className="text-emerald-400 font-semibold">{correct}</span> richtig
         </div>
-        <button type="button" onClick={exit} aria-label="Beenden" className="w-10 h-10 rounded-xl bg-zinc-900 flex items-center justify-center active:scale-95 transition-transform">
-          <LogOut className="w-5 h-5 text-zinc-400" />
+        <button type="button" onClick={() => setPaused(true)} aria-label="Pause" className="w-10 h-10 rounded-xl bg-zinc-900 flex items-center justify-center active:scale-95 transition-transform">
+          <Pause className="w-5 h-5 text-zinc-400" />
         </button>
       </div>
 
@@ -266,13 +334,31 @@ export default function SoundPlay({ roundId }) {
             ) : <Loader2 className="w-6 h-6 animate-spin" />}
           </div>
         ) : current.type === 'sound' ? (
-          <SoundQuestion key={current.payload.question_id} question={current.payload} soundOn={soundOn} onResolved={onResolved} />
+          <SoundQuestion key={current.payload.question_id} question={current.payload} soundOn={soundOn} paused={paused} onResolved={onResolved} />
         ) : current.type === 'series' ? (
-          <SeriesQuestion key={current.payload.ratingKey} show={current.payload} soundOn={soundOn} onResolved={onResolved} />
+          <SeriesQuestion key={current.payload.ratingKey} show={current.payload} soundOn={soundOn} paused={paused} onResolved={onResolved} />
         ) : (
           <NormalCard key={current.payload.id} q={current.payload} onResolved={onResolved} />
         )}
       </div>
+
+      {/* Quit = pause + confirm (mirrors QuizPlay): resume, or end the round and see the Auflösung. */}
+      {paused && (
+        <div className="absolute inset-0 z-50 bg-zinc-950/85 flex items-center justify-center p-6">
+          <div className="w-full max-w-sm rounded-2xl bg-zinc-900 ring-1 ring-zinc-800 p-6 text-center">
+            <p className="font-display-tight text-2xl mb-1">Pausiert</p>
+            <p className="text-sm text-zinc-400 mb-5">Frage pausiert · Ton gestoppt.</p>
+            <div className="space-y-2">
+              <button type="button" onClick={() => setPaused(false)} className="w-full min-h-[44px] py-3 rounded-xl bg-amber-400 text-zinc-950 font-semibold flex items-center justify-center gap-2">
+                <Play className="w-4 h-4 fill-zinc-950" /> Weiter
+              </button>
+              <button type="button" onClick={finish} className="w-full min-h-[44px] py-3 rounded-xl bg-rose-500/90 text-white font-medium flex items-center justify-center gap-2">
+                <LogOut className="w-4 h-4" /> Beenden &amp; Auflösung
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
