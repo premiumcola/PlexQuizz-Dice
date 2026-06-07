@@ -1,6 +1,5 @@
 // Quiz sub-router. App delegates any /quiz* path here.
 import { matchRoute } from '../../router';
-import QuizHome from './QuizHome';
 import QuizSetup from './QuizSetup';
 import QuizPlay from './QuizPlay';
 import SoundPlay from './SoundPlay';
@@ -18,5 +17,6 @@ export default function QuizRouter({ pathname }) {
   if ((m = matchRoute('/quiz/solutions/:roundId', pathname))) return <QuizSolutions roundId={m.roundId} />;
   if ((m = matchRoute('/quiz/result/:roundId', pathname))) return <QuizResult roundId={m.roundId} />;
   if ((m = matchRoute('/quiz/review/:roundId', pathname))) return <QuizReview roundId={m.roundId} />;
-  return <QuizHome />;
+  // No intro page: /quiz lands straight on the round-setup config.
+  return <QuizSetup />;
 }
