@@ -713,6 +713,14 @@ export default function QuizPlay({ roundId }) {
     navigate(to);
   };
 
+  // Stop the round and show the Auflösung (every correct answer, incl. missed). Abandon marks
+  // the round ended server-side (it is NOT dropped), so /solutions can resolve it.
+  const goSolutions = async () => {
+    clearTimeout(advanceRef.current);
+    try { await quizAbandon(roundId); } catch { /* ignore */ }
+    navigate(`/quiz/solutions/${roundId}`);
+  };
+
   // One option chip. coverWidth is set only on the measured image grid (→ a fixed 2:3 box).
   const renderOption = (o, coverWidth) => (
     <OptionButton
@@ -961,6 +969,14 @@ export default function QuizPlay({ roundId }) {
           <div className="w-24 h-24 rounded-full ring-4 ring-amber-400 flex items-center justify-center text-amber-300 text-5xl font-bold tabular-nums animate-pulse">
             {roundTwoCountdown}
           </div>
+          {/* Stop here instead of replaying — jump straight to the Auflösung. */}
+          <button
+            type="button"
+            onClick={(e) => { e.stopPropagation(); goSolutions(); }}
+            className="mt-10 min-h-[44px] px-5 rounded-xl bg-zinc-800 text-zinc-200 font-medium flex items-center gap-2 active:scale-[0.98] transition-transform"
+          >
+            <LogOut className="w-4 h-4" /> Aufhören &amp; Auflösung
+          </button>
         </div>
       )}
 
@@ -972,7 +988,7 @@ export default function QuizPlay({ roundId }) {
             <div className="space-y-2">
               <button type="button" onClick={resume} className="w-full py-3 rounded-xl bg-amber-400 text-zinc-950 font-semibold flex items-center justify-center gap-2"><Play className="w-4 h-4 fill-zinc-950" /> Weiter</button>
               <button type="button" onClick={() => leave('/quiz/setup')} className="w-full py-3 rounded-xl bg-zinc-800 text-zinc-200 font-medium flex items-center justify-center gap-2"><RotateCcw className="w-4 h-4" /> Neu starten</button>
-              <button type="button" onClick={() => leave('/quiz')} className="w-full py-3 rounded-xl bg-rose-500/90 text-white font-medium flex items-center justify-center gap-2"><LogOut className="w-4 h-4" /> Beenden</button>
+              <button type="button" onClick={goSolutions} className="w-full py-3 rounded-xl bg-rose-500/90 text-white font-medium flex items-center justify-center gap-2"><LogOut className="w-4 h-4" /> Beenden &amp; Auflösung</button>
             </div>
           </div>
         </div>

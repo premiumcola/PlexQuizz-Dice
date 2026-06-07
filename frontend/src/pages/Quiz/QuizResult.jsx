@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Loader2, Save, Trophy, TrendingUp, AlertTriangle, Clock, Check, RotateCcw, SkipForward, Camera, Medal } from 'lucide-react';
+import { Loader2, Save, Trophy, TrendingUp, AlertTriangle, Clock, Check, RotateCcw, SkipForward, Camera, Medal, ListChecks } from 'lucide-react';
 import { navigate } from '../../router';
 import { quizComplete, quizAbandon, quizHistory, quizRound, quizUploadPhoto, quizSubmitScore } from '../../api';
 import { loadResults, loadRound, clearRound } from './store';
@@ -288,6 +288,9 @@ export default function QuizResult({ roundId }) {
         {saveError && (
           <p className="mt-3 text-center text-sm text-rose-300">Speichern fehlgeschlagen — bitte erneut versuchen.</p>
         )}
+        <button type="button" onClick={() => navigate(`/quiz/solutions/${roundId}`)} className="mt-3 w-full min-h-[44px] rounded-2xl bg-zinc-800 text-zinc-100 font-medium flex items-center justify-center gap-2 active:scale-[0.98] transition-transform">
+          <ListChecks className="w-5 h-5 text-amber-400" /> Auflösung anzeigen
+        </button>
         <button type="button" onClick={discard} className="mt-3 w-full py-2 text-sm text-zinc-500 active:text-zinc-300">
           Verwerfen
         </button>
