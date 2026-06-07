@@ -12,6 +12,7 @@ import {
 import DieIcon from '../components/DieIcon';
 import ThemeEnrichmentPanel from '../components/ThemeEnrichmentPanel';
 import SeriesCoveragePanel from '../components/SeriesCoveragePanel';
+import QuizConfig from '../components/QuizConfig';
 
 const APP_VERSION = import.meta.env.VITE_APP_VERSION || '1.0.0';
 // Build stamp so the live (possibly PWA-cached) build is identifiable on-device.
@@ -74,6 +75,7 @@ const TABS = [
   { id: 'allgemein', label: 'Allgemein' },
   { id: 'plex', label: 'Plex' },
   { id: 'bibliotheken', label: 'Bibliotheken' },
+  { id: 'quiz', label: 'Quiz' },
   { id: 'ueber', label: 'Über' },
 ];
 
@@ -784,6 +786,7 @@ export default function Settings({ onConnected }) {
           </section>
         )}
 
+        {loaded && activeTab === 'quiz' && <QuizConfig />}
 
         {loaded && activeTab === 'ueber' && (
           <section className="space-y-4">
