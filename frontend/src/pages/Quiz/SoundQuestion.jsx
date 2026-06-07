@@ -194,10 +194,12 @@ export default function SoundQuestion({ question, soundOn = true, paused = false
     : null;
 
   const cover = resolved === 'correct' && reveal?.ratingKey ? `/api/library/thumb/${reveal.ratingKey}` : null;
-  // Blurred-cover hint: the answer poster (token-hidden by question id) fades in from hint 1 and
-  // de-blurs a little per hint, never fully sharp until solved.
-  const hintCover = hintLevel > 0 && resolved == null ? `/api/themes/cover/${question.question_id}` : null;
-  const hintBlur = Math.max(6, 26 - hintLevel * 6);
+  // Blurred FANART hint behind the waves: the answer's wide backdrop (token-hidden by question id,
+  // ?art=1) fades in from hint 1 and de-blurs/brightens a little per hint — never fully sharp before
+  // the answer is solved.
+  const fanart = hintLevel > 0 && resolved == null ? `/api/themes/cover/${question.question_id}?art=1` : null;
+  const fanartBlur = Math.max(6, 30 - hintLevel * 6);
+  const fanartOpacity = Math.min(0.5, 0.15 + hintLevel * 0.1);
 
   return (
     <div className="flex flex-col h-full min-h-0">
@@ -230,6 +232,20 @@ export default function SoundQuestion({ question, soundOn = true, paused = false
           />
         ) : (
           <>
+            {fanart && (
+              <>
+                <img
+                  src={fanart}
+                  alt=""
+                  aria-hidden="true"
+                  className="absolute inset-0 w-full h-full object-cover transition-[filter,opacity] duration-700"
+                  style={{ filter: `blur(${fanartBlur}px)`, opacity: fanartOpacity }}
+                  onError={(e) => { e.currentTarget.style.display = 'none'; }}
+                />
+                {/* subtle scrim so the waves + Play button stay readable over the fanart */}
+                <div className="absolute inset-0 bg-zinc-950/40" />
+              </>
+            )}
             <WaveStage playing={playing} />
             <div className="relative z-10 flex flex-col items-center gap-4">
               <button
@@ -306,17 +322,7 @@ export default function SoundQuestion({ question, soundOn = true, paused = false
       ) : (
         <div className="mt-3">
           {slots && slots.length > 0 ? (
-            <div className="relative rounded-2xl overflow-hidden">
-              {hintCover && (
-                <img src={hintCover} alt="" aria-hidden="true"
-                  className="absolute inset-0 w-full h-full object-cover opacity-50 transition-[filter] duration-500"
-                  style={{ filter: `blur(${hintBlur}px)` }}
-                  onError={(e) => { e.currentTarget.style.display = 'none'; }} />
-              )}
-              <div className="relative z-10 py-2">
-                <WuerfelInput slots={slots} lockedLetters={locked} onGuessChange={onGuess} onSubmit={submit} disabled={false} />
-              </div>
-            </div>
+            <WuerfelInput slots={slots} lockedLetters={locked} onGuessChange={onGuess} onSubmit={submit} disabled={false} />
           ) : (
             <div className="h-11 flex items-center justify-center text-zinc-600 text-sm">…</div>
           )}

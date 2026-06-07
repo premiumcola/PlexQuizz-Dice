@@ -147,9 +147,12 @@ export default function SeriesQuestion({ show, soundOn = true, paused = false, o
   const meterColor = meter.accepted ? '#22c55e' : '#f5a623';
 
   const cover = resolved === 'correct' ? (reveal?.poster_url || show.thumb_url || null) : null;
-  // Once hints start, fade the poster in VERY blurred behind the tiles; de-blur a little per hint,
-  // but never fully clear until solved.
-  const hintBlur = hintLevel > 0 && resolved !== 'correct' ? Math.max(6, 26 - hintLevel * 6) : 0;
+  // Blurred FANART hint behind the waves: the show's wide backdrop (token-hidden, ?art=1; falls back
+  // to the poster) fades in from hint 1 and de-blurs/brightens a little per hint — never fully sharp
+  // before the answer is solved.
+  const fanart = hintLevel > 0 && resolved == null ? `/api/series/thumb/${show.ratingKey}?art=1` : null;
+  const fanartBlur = Math.max(6, 30 - hintLevel * 6);
+  const fanartOpacity = Math.min(0.5, 0.15 + hintLevel * 0.1);
 
   return (
     <div className="flex flex-col h-full min-h-0">
@@ -179,6 +182,20 @@ export default function SeriesQuestion({ show, soundOn = true, paused = false, o
           />
         ) : (
           <>
+            {fanart && (
+              <>
+                <img
+                  src={fanart}
+                  alt=""
+                  aria-hidden="true"
+                  className="absolute inset-0 w-full h-full object-cover transition-[filter,opacity] duration-700"
+                  style={{ filter: `blur(${fanartBlur}px)`, opacity: fanartOpacity }}
+                  onError={(e) => { e.currentTarget.style.display = 'none'; }}
+                />
+                {/* subtle scrim so the waves + Play button stay readable over the fanart */}
+                <div className="absolute inset-0 bg-zinc-950/40" />
+              </>
+            )}
             <WaveStage playing={playing} />
             <div className="relative z-10 flex flex-col items-center gap-4">
               <button
@@ -222,18 +239,7 @@ export default function SeriesQuestion({ show, soundOn = true, paused = false, o
         </div>
       ) : (
         <div className="mt-3">
-          {/* Tiles, optionally over a blurred poster that de-blurs with each hint */}
-          <div className="relative rounded-2xl overflow-hidden">
-            {hintBlur > 0 && show.thumb_url && (
-              <img src={show.thumb_url} alt="" aria-hidden="true"
-                className="absolute inset-0 w-full h-full object-cover opacity-40 transition-[filter] duration-500"
-                style={{ filter: `blur(${hintBlur}px)` }}
-                onError={(e) => { e.currentTarget.style.display = 'none'; }} />
-            )}
-            <div className="relative z-10 py-2">
-              <WuerfelInput slots={slots} lockedLetters={locked} onGuessChange={onGuess} onSubmit={submit} disabled={false} />
-            </div>
-          </div>
+          <WuerfelInput slots={slots} lockedLetters={locked} onGuessChange={onGuess} onSubmit={submit} disabled={false} />
           <div className="mt-3 flex items-center gap-3">
             <div className="flex-1 h-2 rounded-full bg-zinc-800 overflow-hidden">
               <div className="h-full rounded-full transition-[width] duration-200" style={{ width: `${meterPct}%`, background: meterColor }} />
