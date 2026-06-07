@@ -61,6 +61,9 @@ export default function QuizSetup() {
 
   const themesReady = (themeCount ?? 0) >= MIN_POOL;
   const seriesReady = (seriesCount ?? 0) >= MIN_POOL;
+  // Difficulty drives the question pool only for normal/mixed; for sound/series the title is simply
+  // guessed, so the selector is greyed out there.
+  const diffDisabled = mode === 'sound' || mode === 'series';
   const isReady = (need) => {
     if (need === 'themes') return themesReady;
     if (need === 'series') return seriesReady;
@@ -254,14 +257,17 @@ export default function QuizSetup() {
 
           <div>
             <label className="text-sm font-medium text-zinc-200 uppercase tracking-wide mb-2 block">Schwierigkeit</label>
-            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+            <div className={`grid grid-cols-2 sm:grid-cols-4 gap-2 ${diffDisabled ? 'opacity-40' : ''}`}>
               {DIFFS.map(({ v, label }) => (
-                <button key={v} type="button" onClick={() => setDifficulty(v)}
-                  className={`min-h-[44px] rounded-xl text-sm font-medium transition-colors ${difficulty === v ? 'bg-amber-400 text-zinc-950' : 'bg-zinc-800 text-zinc-300'}`}>
+                <button key={v} type="button" disabled={diffDisabled} onClick={() => setDifficulty(v)}
+                  className={`min-h-[44px] rounded-xl text-sm font-medium transition-colors ${difficulty === v ? 'bg-amber-400 text-zinc-950' : 'bg-zinc-800 text-zinc-300'} ${diffDisabled ? 'cursor-not-allowed' : 'active:scale-[0.98]'}`}>
                   {label}
                 </button>
               ))}
             </div>
+            {diffDisabled && (
+              <p className="text-xs text-zinc-500 mt-2">Bei Sound &amp; Serien wird der Titel erraten — die Schwierigkeit gilt nur für normale Fragen.</p>
+            )}
           </div>
 
           <div>
