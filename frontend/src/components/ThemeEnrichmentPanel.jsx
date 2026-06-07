@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
-import { Music2, Loader2, AlertCircle, Sparkles, Search, Play, Layers, ChevronDown } from 'lucide-react';
+import { Music2, Loader2, AlertCircle, Sparkles, Search, Play, Square, Layers, ChevronDown } from 'lucide-react';
 // Film-Themes pipeline (movies): seed coverage → (1) theme identified (Seed/KI) → (2) iTunes
 // preview. Wires the backend enrichment API:
 //   GET  /api/themes/status          — two-stage totals + seed diagnostics (polled)
@@ -27,6 +27,7 @@ export default function ThemeEnrichmentPanel() {
   const [error, setError] = useState('');
   const [sample, setSample] = useState(null);  // {title, composer, theme_title}
   const [sampleErr, setSampleErr] = useState('');
+  const [playing, setPlaying] = useState(false); // is the Hörprobe currently playing?
   const pollRef = useRef(null);
   const audioRef = useRef(null);
 
@@ -90,12 +91,19 @@ export default function ThemeEnrichmentPanel() {
       setSample(s);
       if (audioRef.current && s.preview_url) {
         audioRef.current.src = s.preview_url;
-        audioRef.current.play().catch(() => {});
+        audioRef.current.play().then(() => setPlaying(true)).catch(() => setPlaying(false));
       }
     } catch (e) {
       setSample(null);
       setSampleErr(e.status === 404 ? 'Noch keine Hörprobe vorhanden.' : (e.message || 'Fehler'));
     }
+  };
+
+  // Stop the Hörprobe: pause + rewind so the next play starts fresh.
+  const stopSample = () => {
+    const a = audioRef.current;
+    if (a) { a.pause(); a.currentTime = 0; }
+    setPlaying(false);
   };
 
   const running = Boolean(status?.running);
@@ -118,7 +126,7 @@ export default function ThemeEnrichmentPanel() {
         Pipeline: vor-gescannter Seed → Theme erkannt (Seed/KI) → spielbare iTunes-Hörprobe.
       </p>
 
-      <audio ref={audioRef} className="hidden" />
+      <audio ref={audioRef} className="hidden" onEnded={() => setPlaying(false)} />
 
       {loading ? (
         <div className="flex items-center gap-2 text-zinc-400 text-sm"><Loader2 className="w-4 h-4 animate-spin" /> Lädt…</div>
@@ -146,14 +154,25 @@ export default function ThemeEnrichmentPanel() {
           <Bar value={previews} total={total} />
           <div className="text-[11px] text-zinc-500 mt-1 tabular-nums">{withoutPreview} ohne Hörprobe</div>
 
-          {/* Hear a sample */}
-          <button
-            type="button"
-            onClick={playSample}
-            className="w-full min-h-[44px] mt-3 px-4 rounded-xl bg-zinc-800 text-amber-300 font-medium flex items-center justify-center gap-2 active:scale-[0.98] transition-transform"
-          >
-            <Play className="w-4 h-4 fill-amber-300" /> Hörprobe testen
-          </button>
+          {/* Hear a sample — play + Stop in one row */}
+          <div className="flex items-center gap-2 mt-3">
+            <button
+              type="button"
+              onClick={playSample}
+              className="flex-1 min-h-[44px] px-4 rounded-xl bg-zinc-800 text-amber-300 font-medium flex items-center justify-center gap-2 active:scale-[0.98] transition-transform"
+            >
+              <Play className="w-4 h-4 fill-amber-300" /> Hörprobe testen
+            </button>
+            <button
+              type="button"
+              onClick={stopSample}
+              disabled={!playing}
+              aria-label="Stopp"
+              className="w-12 min-h-[44px] shrink-0 rounded-xl bg-zinc-700 text-zinc-100 flex items-center justify-center active:scale-[0.98] transition-transform disabled:opacity-40 disabled:cursor-not-allowed"
+            >
+              <Square className="w-4 h-4 fill-current" />
+            </button>
+          </div>
           {sample && (
             <div className="mt-2 text-xs text-zinc-400 text-center truncate">
               ♪ {[sample.theme_title, sample.composer].filter(Boolean).join(' · ')}
