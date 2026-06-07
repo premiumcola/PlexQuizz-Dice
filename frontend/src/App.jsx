@@ -48,7 +48,10 @@ export default function App() {
   const pathname = usePathname();
   const [needSettings, setNeedSettings] = useState(false);
   const tab = activeTab(pathname);
-  const immersive = pathname.startsWith('/quiz/play'); // full-screen quiz play
+  // Full-screen quiz play (normal + sound/series/mixed): hide the global nav so it never
+  // overlaps the 100dvh play screen or clips its top-bar controls. The Auflösung/result pages
+  // stay non-immersive (they scroll and keep the nav).
+  const immersive = pathname.startsWith('/quiz/play') || pathname.startsWith('/quiz/sound');
 
   // On first load: to Settings if Plex isn't connected; otherwise honour the
   // start-tab preference when landing on the root.
@@ -134,7 +137,10 @@ export default function App() {
               border (depth via the translucent surface + shadow). Only at lg+, where the
               centered content column leaves a clear right gutter, so it never overlaps the
               header or the J1 mini-filters (which live right-aligned inside the column). */}
-          <nav className="hidden lg:flex lg:flex-col fixed top-4 right-4 z-40 gap-1 p-1 rounded-2xl bg-zinc-900/90 backdrop-blur shadow-lg shadow-black/40">
+          <nav
+            className="hidden lg:flex lg:flex-col fixed right-4 z-40 gap-1 p-1 rounded-2xl bg-zinc-900/90 backdrop-blur shadow-lg shadow-black/40"
+            style={{ top: 'max(1rem, env(safe-area-inset-top))' }}
+          >
             {TABS.map((t) => (
               <NavItem key={t.id} active={tab === t.id} onClick={() => navigate(t.path)} icon={t.icon} label={t.label} />
             ))}
