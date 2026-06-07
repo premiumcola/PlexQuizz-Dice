@@ -195,6 +195,9 @@ export function scoreThemeGuess(questionId, guess) {
 export function answerThemeGuess(questionId, guess) {
   return postJson('/api/themes/answer', { question_id: questionId, guess });
 }
+export function themeHint(questionId, level) {
+  return postJson('/api/themes/hint', { question_id: questionId, level });
+}
 
 // ---- TV-series themes ----
 export function getSeriesEligible() {
@@ -211,4 +214,7 @@ export function answerSeriesGuess(ratingKey, guess) {
 }
 export function rescanSeries() {
   return postJson('/api/series/rescan', {});
+}
+export function seriesHint(ratingKey, level) {
+  return postJson('/api/series/hint', { ratingKey, level });
 }
