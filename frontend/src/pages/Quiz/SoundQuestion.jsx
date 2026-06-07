@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { Play, Pause, Check, X, Music2, ExternalLink, Lightbulb } from 'lucide-react';
-import { scoreThemeGuess, answerThemeGuess, themeHint, getThemeReveal } from '../../api';
+import { scoreThemeGuess, answerThemeGuess, themeHint, getThemeReveal, themeArtUrl } from '../../api';
 import { plexAppUrl } from '../../lib/plexLink';
 import { playSound } from './audio';
 import WaveStage from './WaveStage';
@@ -194,12 +194,12 @@ export default function SoundQuestion({ question, soundOn = true, paused = false
     : null;
 
   const cover = resolved === 'correct' && reveal?.ratingKey ? `/api/library/thumb/${reveal.ratingKey}` : null;
-  // Blurred FANART hint behind the waves: the answer's wide backdrop (token-hidden by question id,
-  // ?art=1) fades in from hint 1 and de-blurs/brightens a little per hint — never fully sharp before
-  // the answer is solved.
-  const fanart = hintLevel > 0 && resolved == null ? `/api/themes/cover/${question.question_id}?art=1` : null;
-  const fanartBlur = Math.max(6, 30 - hintLevel * 6);
-  const fanartOpacity = Math.min(0.5, 0.15 + hintLevel * 0.1);
+  // Blurred FANART hint behind the waves: the answer's wide Plex BACKDROP (token-hidden by question
+  // id; falls back to the poster server-side) fades in from hint 1 and de-blurs/brightens a little
+  // per hint — starts ~28px / 0.15 opacity, eases to ~6px / 0.5, never fully sharp before solved.
+  const fanart = hintLevel > 0 && resolved == null ? themeArtUrl(question.question_id) : null;
+  const fanartBlur = Math.max(6, 28 - (hintLevel - 1) * 6);
+  const fanartOpacity = Math.min(0.5, 0.15 + (hintLevel - 1) * 0.12);
 
   return (
     <div className="flex flex-col h-full min-h-0">

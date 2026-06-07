@@ -207,6 +207,11 @@ export function answerThemeGuess(questionId, guess) {
 export function getThemeReveal(questionId) {
   return postJson('/api/themes/reveal', { question_id: questionId });
 }
+// Token-hidden film BACKDROP (wide fanart) for the behind-the-waves hint, keyed by question id
+// (the answer key never appears in the URL). Used as an <img src>.
+export function themeArtUrl(questionId) {
+  return `/api/themes/art/${questionId}`;
+}
 export function themeHint(questionId, level) {
   return postJson('/api/themes/hint', { question_id: questionId, level });
 }
