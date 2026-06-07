@@ -9,7 +9,8 @@ from flask import Blueprint, jsonify, request
 import quiz_hints
 import theme_enrichment
 import theme_quiz
-from routes.library import thumb as _library_thumb
+from routes.library import proxy_plex_image, thumb as _library_thumb
+from services import library_cache
 
 bp = Blueprint("themes", __name__, url_prefix="/api/themes")
 
@@ -111,6 +112,23 @@ def cover(question_id: str):
     if not movie_id:
         return jsonify({"error": "Frage abgelaufen"}), 404
     return _library_thumb(str(movie_id))
+
+
+@bp.get("/art/<question_id>")
+def art(question_id: str):
+    """Token-hidden film BACKDROP (wide fanart) for the blurred behind-the-waves hint, keyed by
+    question id (the answer key/title never appears in the URL or body). Proxies the movie's _art,
+    falling back to its poster (_thumb); a clean 404 when neither exists (never a 500)."""
+    movie_id = theme_quiz.cover_movie_id(question_id)
+    if not movie_id:
+        return jsonify({"error": "Frage abgelaufen"}), 404
+    movie = library_cache.find(str(movie_id))
+    if not movie:
+        return jsonify({"error": "not found"}), 404
+    path = movie.get("_art") or movie.get("_thumb")
+    if not path:
+        return jsonify({"error": "no image"}), 404
+    return proxy_plex_image(path)
 
 
 @bp.post("/reveal")

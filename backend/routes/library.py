@@ -54,16 +54,10 @@ def refresh_library():
         return jsonify({"ok": False, "error": str(exc)}), 502
 
 
-@bp.get("/thumb/<rating_key>")
-def thumb(rating_key: str):
-    """Proxy a Plex poster/art so the Plex token never reaches the browser."""
-    movie = library_cache.find(rating_key)
-    if not movie:
-        return jsonify({"error": "not found"}), 404
-    path = movie.get("_art") if request.args.get("art") else movie.get("_thumb")
-    if not path:
-        return jsonify({"error": "no image"}), 404
-
+def proxy_plex_image(path: str):
+    """Proxy a Plex image path with the server token attached, so the token never reaches the
+    browser. Returns a Flask image Response, or a JSON error tuple (400/502/upstream status).
+    Shared by the library thumb route and the token-hidden quiz cover/art endpoints."""
     plex = settings_store.get("plex")
     url, token = plex.get("url"), plex.get("token")
     if not url or not token:
@@ -85,3 +79,15 @@ def thumb(rating_key: str):
         content_type=upstream.headers.get("Content-Type", "image/jpeg"),
         headers={"Cache-Control": "public, max-age=86400"},
     )
+
+
+@bp.get("/thumb/<rating_key>")
+def thumb(rating_key: str):
+    """Proxy a Plex poster/art so the Plex token never reaches the browser."""
+    movie = library_cache.find(rating_key)
+    if not movie:
+        return jsonify({"error": "not found"}), 404
+    path = movie.get("_art") if request.args.get("art") else movie.get("_thumb")
+    if not path:
+        return jsonify({"error": "no image"}), 404
+    return proxy_plex_image(path)
