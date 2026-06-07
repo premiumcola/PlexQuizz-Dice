@@ -8,19 +8,10 @@ import './index.css';
 // (?debug=1 or the plexdice_debug flag). Lazy — when disabled nothing is imported. See debug.js.
 initDebug();
 
-// JS-driven viewport height for the #root flex column (no vh/dvh). In the iOS standalone PWA
-// window.innerHeight is the VISUAL viewport and under-reports by the top inset (873 on an iPhone
-// 15 Pro Max) while window.screen.height is the full physical screen (932). PlexDice is portrait-
-// locked, so screen.height is always the true full height — take the max of the two so #root fills
-// the screen and the bottom nav reaches the physical edge, with no body strip showing below it.
-const setAppHeight = () => {
-  const h = Math.max(window.innerHeight, window.screen.height);
-  document.documentElement.style.setProperty('--app-height', h + 'px');
-};
-setAppHeight();
-window.addEventListener('resize', setAppHeight);
-window.addEventListener('orientationchange', setAppHeight);
-window.visualViewport && window.visualViewport.addEventListener('resize', setAppHeight);
+// Viewport height is now pure CSS (index.css: html/body/#root use 100dvh — the dynamic visible
+// viewport), so the only scroller (<main>) is exactly the visible height and its last content
+// always scrolls into view. This replaced a JS Math.max(innerHeight, screen.height) that overshot
+// the visible viewport and pushed the final cards / bottom nav below the fold.
 
 createRoot(document.getElementById('root')).render(
   <StrictMode>

@@ -6,7 +6,8 @@ html {
   font-family: 'Inter', system-ui, sans-serif;
   font-feature-settings: 'cv11', 'ss01', 'ss03';
   font-variation-settings: 'opsz' 18;
-  height: var(--app-height);
+  height: 100vh; /* fallback for browsers without dvh */
+  height: 100dvh;
   margin: 0;
   overflow: hidden;
   overscroll-behavior: none;
@@ -34,14 +35,14 @@ html {
   font-variation-settings: 'opsz' 20;
 }
 
-/* Viewport lock: html, body AND #root all take height: var(--app-height) — the JS-set full screen
-   height (Math.max(innerHeight, screen.height) = 932). height:100% would resolve to the SHORT iOS
-   standalone layout viewport (873); since body is overflow:hidden, that short parent CLIPS the
-   bottom of the taller #root and drops the nav below the fold (the black strip). Equal explicit px
-   heights on all three stop the clip. No vh/dvh → no float; overflow/overscroll locked → no
-   rubber-band. The only scroller is <main>. */
+/* Viewport lock: html, body AND #root all take 100dvh — the DYNAMIC visible viewport, so the
+   scroll area (<main>) is exactly the visible height and its last content always scrolls into
+   view (the old JS Math.max(innerHeight, screen.height) overshot the visible viewport, so main
+   extended below the fold and its final cards were unreachable). body is overflow:hidden so the
+   ONLY scroller is <main>; overscroll locked → no rubber-band. */
 body {
-  height: var(--app-height);
+  height: 100vh;
+  height: 100dvh;
   margin: 0;
   overflow: hidden;
   overscroll-behavior: none;
@@ -50,14 +51,11 @@ body {
 }
 
 #root {
-  /* JS-driven height: main.jsx sets --app-height = window.innerHeight + top safe-area inset
-     (= full screen height). Normal-flow block — NO position:fixed / inset — so it cannot
-     mismatch the visual viewport. 100% fallback before/without JS. NO vh/dvh anywhere.
-     min-height:100% floors it at the full body (screen) height, so the bottom nav always
-     reaches the physical bottom edge even when --app-height undershoots by a rounding px —
-     without it the BODY (page background) peeks through in the gap below the nav. */
-  height: var(--app-height, 100%);
-  min-height: 100%;
+  /* Normal-flow flex column at the dynamic visible height. NO position:fixed/inset, so it can't
+     mismatch the visual viewport; dvh tracks the real visible area (URL bar / safe areas), so the
+     bottom nav sits at the visible bottom and <main> scrolls fully. */
+  height: 100vh;
+  height: 100dvh;
   display: flex;
   flex-direction: column;
   background: #09090b;
