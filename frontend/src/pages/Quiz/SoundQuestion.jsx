@@ -131,6 +131,8 @@ export default function SoundQuestion({ question, soundOn = true, onResolved }) 
     ? (plexAppUrl(reveal.machineIdentifier, reveal.ratingKey) || reveal.plex_url)
     : null;
 
+  const cover = resolved === 'correct' && reveal?.ratingKey ? `/api/library/thumb/${reveal.ratingKey}` : null;
+
   return (
     <div className="flex flex-col h-full min-h-0">
       <audio
@@ -144,6 +146,16 @@ export default function SoundQuestion({ question, soundOn = true, onResolved }) 
         }}
         onEnded={() => setPlaying(false)}
       />
+
+      {/* Consistent question header — cover appears here on a correct answer (V2.3/V2.4) */}
+      <div className="shrink-0 flex items-center gap-3 mb-3 min-h-[2rem]">
+        {cover && (
+          <img src={cover} alt="" className="w-11 h-16 rounded-lg object-cover shrink-0"
+            style={{ boxShadow: '0 0 14px rgba(245,166,35,0.35)' }}
+            onError={(e) => { e.currentTarget.style.display = 'none'; }} />
+        )}
+        <h2 className="text-lg font-semibold text-zinc-100 leading-tight">Welcher Film läuft hier?</h2>
+      </div>
 
       {/* Audio stage: calm waves at the bottom, big Play/Pause centered */}
       <div className="relative flex-1 min-h-0 rounded-2xl bg-zinc-900 overflow-hidden flex items-center justify-center">

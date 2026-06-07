@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { Play, Pause, RotateCcw, Check, X, Tv, ExternalLink } from 'lucide-react';
+import { Play, Pause, RotateCcw, Check, X, ExternalLink } from 'lucide-react';
 import { scoreSeriesGuess, answerSeriesGuess } from '../../api';
 import { playSound } from './audio';
 import WaveStage from './WaveStage';
@@ -97,6 +97,8 @@ export default function SeriesQuestion({ show, soundOn = true, onResolved }) {
   const meterPct = Math.max(0, Math.min(100, Math.round(meter.score || 0)));
   const meterColor = meter.accepted ? '#22c55e' : '#f5a623';
 
+  const cover = resolved === 'correct' ? (reveal?.poster_url || null) : null;
+
   return (
     <div className="flex flex-col h-full min-h-0">
       <audio
@@ -107,6 +109,16 @@ export default function SeriesQuestion({ show, soundOn = true, onResolved }) {
         onTimeUpdate={(e) => { const a = e.currentTarget; if (a.duration) setProgress(a.currentTime / a.duration); }}
         onEnded={() => setPlaying(false)}
       />
+
+      {/* Consistent question header — poster appears here on a correct answer (V2.3/V2.4) */}
+      <div className="shrink-0 flex items-center gap-3 mb-3 min-h-[2rem]">
+        {cover && (
+          <img src={cover} alt="" className="w-11 h-16 rounded-lg object-cover shrink-0"
+            style={{ boxShadow: '0 0 14px rgba(245,166,35,0.35)' }}
+            onError={(e) => { e.currentTarget.style.display = 'none'; }} />
+        )}
+        <h2 className="text-lg font-semibold text-zinc-100 leading-tight">Welche Serie ist das?</h2>
+      </div>
 
       <div className="relative flex-1 min-h-0 rounded-2xl bg-zinc-900 overflow-hidden flex items-center justify-center">
         <WaveStage playing={playing} />
@@ -165,7 +177,6 @@ export default function SeriesQuestion({ show, soundOn = true, onResolved }) {
         </div>
       ) : (
         <div className="mt-3">
-          <div className="flex items-center gap-2 mb-2 text-zinc-500 text-xs"><Tv className="w-4 h-4 text-amber-400" /> Welche Serie ist das?</div>
           <input
             value={guess}
             onChange={(e) => onGuess(e.target.value)}
