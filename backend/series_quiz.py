@@ -55,6 +55,12 @@ def _reveal(show: Dict[str, Any]) -> Dict[str, Any]:
     }
 
 
+def title_for(rating_key: int) -> Optional[str]:
+    """The show's title (for letter hints). None if the show is unknown."""
+    show = _find_show(rating_key)
+    return show.get("title") if show else None
+
+
 def score(rating_key: int, guess: str) -> Optional[Dict[str, Any]]:
     """Live meter: {score 0-100, accepted}. None if the show is unknown. No answer text."""
     show = _find_show(rating_key)

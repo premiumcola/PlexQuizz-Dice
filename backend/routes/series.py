@@ -22,6 +22,7 @@ from urllib.parse import urljoin
 import requests
 from flask import Blueprint, Response, jsonify, request, stream_with_context
 
+import quiz_hints
 import series_cache
 import series_quiz
 import series_scan
@@ -234,6 +235,22 @@ def answer():
     if result is None:
         return jsonify({"error": "Serie nicht gefunden"}), 404
     return jsonify(result)
+
+
+@bp.post("/hint")
+def hint():
+    """POST /api/series/hint — progressive letter hint for the series title {length, revealed}."""
+    body = request.get_json(silent=True) or {}
+    try:
+        rk = int(body.get("ratingKey"))
+    except (TypeError, ValueError):
+        return jsonify({"error": "ratingKey fehlt"}), 400
+    title = series_quiz.title_for(rk)
+    if not title:
+        return jsonify({"error": "Serie nicht gefunden"}), 404
+    level = body.get("level", 1)
+    level = int(level) if isinstance(level, (int, float)) and not isinstance(level, bool) else 1
+    return jsonify(quiz_hints.reveal_letters(title, max(1, level)))
 
 
 @bp.post("/rescan")
