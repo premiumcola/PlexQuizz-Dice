@@ -12,8 +12,7 @@ const SIZES = [20, 50, 100];
 const MIN_POOL = 8; // Sound / Series / Mixed need at least this many eligible items
 const MODES = [
   { v: 'normal', label: 'Nur normale Fragen', sub: 'Bild- und Wissensfragen', Icon: Clapperboard, need: 'none' },
-  { v: 'sound', label: 'Nur Sound', sub: 'Errate Filme an ihrer Titelmelodie', Icon: Music2, need: 'themes' },
-  { v: 'series', label: 'Serien-Themes', sub: 'Errate Serien an ihrer Titelmelodie', Icon: Tv, need: 'series' },
+  { v: 'sound', label: 'Sound', sub: 'Titel an der Melodie erraten', Icon: Music2, need: 'either' },
   { v: 'mixed', label: 'Mixed', sub: 'Normale Fragen + Sound + Serien', Icon: Shuffle, need: 'either' },
 ];
 const DIFFS = [
@@ -42,6 +41,8 @@ export default function QuizSetup() {
   const [size, setSize] = useState(50);
   const [difficulty, setDifficulty] = useState('medium');
   const [mode, setMode] = useState('normal');
+  const [soundFilme, setSoundFilme] = useState(true);  // Sound sub-source: film themes
+  const [soundSerien, setSoundSerien] = useState(true); // Sound sub-source: series themes
   const [themeCount, setThemeCount] = useState(null); // null until /eligible resolves
   const [seriesCount, setSeriesCount] = useState(null);
   const [photoPreview, setPhotoPreview] = useState(null);
@@ -74,9 +75,15 @@ export default function QuizSetup() {
 
   const themesReady = (themeCount ?? 0) >= MIN_POOL;
   const seriesReady = (seriesCount ?? 0) >= MIN_POOL;
-  // Difficulty drives the question pool only for normal/mixed; for sound/series the title is simply
+  // Difficulty drives the question pool only for normal/mixed; for Sound the title is simply
   // guessed, so the selector is greyed out there.
-  const diffDisabled = mode === 'sound' || mode === 'series';
+  const diffDisabled = mode === 'sound';
+  // Sound sub-sources: a source counts only when selected AND it has enough eligible items.
+  const effFilme = soundFilme && themesReady;
+  const effSerien = soundSerien && seriesReady;
+  const soundStartable = effFilme || effSerien;
+  const toggleFilme = () => { if (!themesReady || (soundFilme && !effSerien)) return; setSoundFilme((v) => !v); };
+  const toggleSerien = () => { if (!seriesReady || (soundSerien && !effFilme)) return; setSoundSerien((v) => !v); };
   const isReady = (need) => {
     if (need === 'themes') return themesReady;
     if (need === 'series') return seriesReady;
@@ -121,10 +128,18 @@ export default function QuizSetup() {
     const criteria = filters.criteria;
     const filterPayload = Object.keys(criteria).length ? criteria : null;
     try {
-      if (mode === 'sound' || mode === 'series') {
-        // Pure client-sequenced sound/series round (no server session needed).
-        const rid = `${mode === 'series' ? 'r' : 's'}${Date.now()}`;
-        saveRound(rid, { mode, difficulty, size, sound_enabled: true, setup, filters: filterPayload });
+      if (mode === 'sound') {
+        if (!soundStartable) {
+          setError('Zu wenige Titel für die gewählte Sound-Quelle.');
+          setStarting(false);
+          return;
+        }
+        // Map the Filme/Serien sub-selection onto the existing client-sequenced player flows:
+        // both → interleaved film+series (no normal questions, via SoundPlay's buildMixedPlan with
+        // normalCount = 0); Filme only → film themes; Serien only → series themes.
+        const soundMode = effFilme && effSerien ? 'soundmix' : effFilme ? 'sound' : 'series';
+        const rid = `s${Date.now()}`;
+        saveRound(rid, { mode: soundMode, difficulty, size, sound_enabled: true, setup, filters: filterPayload });
         navigate(`/quiz/sound/${rid}`);
         return;
       }
@@ -217,6 +232,28 @@ export default function QuizSetup() {
                 );
               })}
             </div>
+
+            {/* Sound sub-selector: Filme / Serien (multi-select, at least one must stay on). */}
+            {mode === 'sound' && (
+              <div className="mt-3 rounded-2xl bg-zinc-900/60 ring-1 ring-zinc-800 p-3">
+                <div className="text-xs uppercase tracking-wide text-zinc-500 mb-2">Quelle</div>
+                <div className="grid grid-cols-2 gap-2">
+                  <button
+                    type="button" onClick={toggleFilme} disabled={!themesReady}
+                    className={`min-h-[44px] rounded-xl px-3 flex items-center justify-center gap-2 text-sm font-medium transition-colors ${effFilme ? 'bg-amber-400 text-zinc-950' : 'bg-zinc-800 text-zinc-300'} ${!themesReady ? 'opacity-40 cursor-not-allowed' : 'active:scale-[0.98]'}`}
+                  >
+                    <Music2 className="w-4 h-4 shrink-0" /> Filme
+                  </button>
+                  <button
+                    type="button" onClick={toggleSerien} disabled={!seriesReady}
+                    className={`min-h-[44px] rounded-xl px-3 flex items-center justify-center gap-2 text-sm font-medium transition-colors ${effSerien ? 'bg-amber-400 text-zinc-950' : 'bg-zinc-800 text-zinc-300'} ${!seriesReady ? 'opacity-40 cursor-not-allowed' : 'active:scale-[0.98]'}`}
+                  >
+                    <Tv className="w-4 h-4 shrink-0" /> Serien
+                  </button>
+                </div>
+                <p className="text-xs text-zinc-500 mt-2">Mind. eine Quelle. Beide = Film- und Serien-Themen gemischt.</p>
+              </div>
+            )}
             {(!themesReady || !seriesReady) && (
               <div className="text-xs text-zinc-500 mt-2 space-y-0.5">
                 {!themesReady && (
@@ -321,7 +358,7 @@ export default function QuizSetup() {
               ))}
             </div>
             {diffDisabled && (
-              <p className="text-xs text-zinc-500 mt-2">Bei Sound &amp; Serien wird der Titel erraten — die Schwierigkeit gilt nur für normale Fragen.</p>
+              <p className="text-xs text-zinc-500 mt-2">Bei Sound wird der Titel erraten — die Schwierigkeit gilt nur für normale Fragen.</p>
             )}
           </div>
 
@@ -346,7 +383,7 @@ export default function QuizSetup() {
           <button
             type="button"
             onClick={start}
-            disabled={!name.trim() || starting}
+            disabled={!name.trim() || starting || (mode === 'sound' && !soundStartable)}
             className="w-full py-4 rounded-2xl text-zinc-950 font-semibold text-lg tracking-wide flex items-center justify-center gap-2 active:scale-[0.985] transition-transform disabled:opacity-40"
             style={{ background: 'linear-gradient(135deg, #f5a623 0%, #ffaf3a 100%)' }}
           >

@@ -170,6 +170,9 @@ export default function SoundPlay({ roundId }) {
           const n = Math.min(targetSize, seriesPoolRef.current.length);
           if (alive) setPlan(Array.from({ length: n }, () => 'series'));
         } else {
+          // 'mixed' (server round → normalQs has the normal questions) AND 'soundmix' (a client
+          // round with no questions → normalQs is empty → buildMixedPlan with normalCount 0 yields
+          // an interleaved film+series round with NO normal questions).
           const [themes, series] = await Promise.all([
             getThemeEligible(filters).catch(() => ({ count: 0 })),
             getSeriesEligible(filters).catch(() => ({ count: 0, shows: [] })),
