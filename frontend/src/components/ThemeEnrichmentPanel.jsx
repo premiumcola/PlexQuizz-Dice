@@ -1,16 +1,26 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
-import { Music2, Loader2, AlertCircle, Sparkles } from 'lucide-react';
+import { Music2, Loader2, AlertCircle, Sparkles, Search } from 'lucide-react';
 // Wires the "Film-Themes" settings section to the backend enrichment API:
-//   GET  /api/themes/status  — live batch progress + library/cache totals (polled)
-//   POST /api/themes/enrich  — start a background batch of N random uncached movies
-import { getThemeStatus, startThemeEnrich } from '../api';
+//   GET  /api/themes/status          — live progress + two-stage totals (polled)
+//   POST /api/themes/enrich          — identify themes for N random uncached movies
+//   POST /api/themes/retry-previews  — keyless: re-find previews for themes that lack one
+import { getThemeStatus, startThemeEnrich, retryThemePreviews } from '../api';
 
 const POLL_MS = 2500;
 const BATCH = 200;
 
-// "Film-Themes" panel: shows how many movies have a cached main-theme + playable
-// preview, and lets the user enrich another batch in the background. While a batch
-// runs it polls /api/themes/status every 2.5s and shows live "<processed> / <target>".
+function Bar({ value, total }) {
+  const pct = total > 0 ? Math.min(100, Math.round((value / total) * 100)) : 0;
+  return (
+    <div className="h-2 rounded-full bg-zinc-800 overflow-hidden">
+      <div className="h-full bg-amber-400 rounded-full transition-[width] duration-500" style={{ width: `${pct}%` }} />
+    </div>
+  );
+}
+
+// "Film-Themes" panel — two stages: (1) a theme is identified (composer/title), (2) a
+// playable iTunes preview is found. Shows both fulfilment bars and offers two keyless
+// actions: identify more themes, or re-search previews for themes that still lack one.
 export default function ThemeEnrichmentPanel() {
   const [status, setStatus] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -19,20 +29,15 @@ export default function ThemeEnrichmentPanel() {
   const pollRef = useRef(null);
 
   const stopPolling = useCallback(() => {
-    if (pollRef.current) {
-      clearInterval(pollRef.current);
-      pollRef.current = null;
-    }
+    if (pollRef.current) { clearInterval(pollRef.current); pollRef.current = null; }
   }, []);
 
   const tick = useCallback(async () => {
     try {
       const s = await getThemeStatus();
       setStatus(s);
-      if (!s.running) stopPolling(); // batch done → stop polling, totals already refreshed
-    } catch {
-      /* transient network blip — keep polling */
-    }
+      if (!s.running) stopPolling();
+    } catch { /* transient blip — keep polling */ }
   }, [stopPolling]);
 
   const startPolling = useCallback(() => {
@@ -47,27 +52,28 @@ export default function ThemeEnrichmentPanel() {
         const s = await getThemeStatus();
         if (!alive) return;
         setStatus(s);
-        if (s.running) startPolling(); // a batch from a previous visit is still running
+        if (s.running) startPolling();
       } catch (e) {
         if (alive) setError(e.message || 'Status nicht verfügbar');
       } finally {
         if (alive) setLoading(false);
       }
     })();
-    return () => {
-      alive = false;
-      stopPolling();
-    };
+    return () => { alive = false; stopPolling(); };
   }, [startPolling, stopPolling]);
 
-  const onEnrich = async () => {
+  const runAction = async (fn) => {
     setStarting(true);
     setError('');
     try {
-      await startThemeEnrich(BATCH);
-      const s = await getThemeStatus(); // reflect running state immediately, then poll
+      const res = await fn(BATCH);
+      if (res && res.started === false) {
+        if (res.reason === 'nothing_to_retry') setError('Keine Themes ohne Hörprobe.');
+        else if (res.reason === 'already_running') setError('Läuft bereits.');
+      }
+      const s = await getThemeStatus();
       setStatus(s);
-      startPolling();
+      if (s.running) startPolling();
     } catch (e) {
       setError(e.message || 'Start fehlgeschlagen');
     } finally {
@@ -77,11 +83,13 @@ export default function ThemeEnrichmentPanel() {
 
   const running = Boolean(status?.running);
   const totalMovies = status?.total_movies || 0;
-  const totalCached = status?.total_cached || 0;
-  const eligible = status?.eligible_count || 0;
-  const remaining = status?.remaining ?? Math.max(0, totalMovies - totalCached);
-  const pct = totalMovies > 0 ? Math.min(100, Math.round((totalCached / totalMovies) * 100)) : 0;
+  const identified = status?.theme_identified || 0;
+  const previews = status?.preview_found || 0;
+  const withoutPreview = status?.theme_without_preview || 0;
+  const p1 = totalMovies > 0 ? Math.round((identified / totalMovies) * 100) : 0;
+  const p2 = totalMovies > 0 ? Math.round((previews / totalMovies) * 100) : 0;
   const statusError = status?.error || error;
+  const runLabel = status?.mode === 'retry' ? 'suche Hörproben…' : 'analysiere…';
 
   return (
     <div className="rounded-2xl bg-zinc-900 ring-1 ring-zinc-800 p-4">
@@ -93,23 +101,23 @@ export default function ThemeEnrichmentPanel() {
       </p>
 
       {loading ? (
-        <div className="flex items-center gap-2 text-zinc-400 text-sm">
-          <Loader2 className="w-4 h-4 animate-spin" /> Lädt…
-        </div>
+        <div className="flex items-center gap-2 text-zinc-400 text-sm"><Loader2 className="w-4 h-4 animate-spin" /> Lädt…</div>
       ) : (
         <>
-          <div className="h-2 rounded-full bg-zinc-800 overflow-hidden">
-            <div
-              className="h-full bg-amber-400 rounded-full transition-[width] duration-500"
-              style={{ width: `${pct}%` }}
-            />
+          {/* Stage 1 — theme identified */}
+          <div className="flex items-center justify-between text-xs text-zinc-300 mb-1">
+            <span>Theme erkannt</span>
+            <span className="tabular-nums text-zinc-400">{identified} / {totalMovies} ({p1}%)</span>
           </div>
+          <Bar value={identified} total={totalMovies} />
 
-          <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-1 mt-2 text-xs tabular-nums">
-            <span className="text-zinc-300">{totalCached} / {totalMovies} analysiert</span>
-            <span className="text-amber-300">{eligible} mit Theme</span>
-            <span className="text-zinc-500">{remaining} offen</span>
+          {/* Stage 2 — preview found */}
+          <div className="flex items-center justify-between text-xs text-zinc-300 mb-1 mt-3">
+            <span>Hörprobe gefunden</span>
+            <span className="tabular-nums text-zinc-400">{previews} / {totalMovies} ({p2}%)</span>
           </div>
+          <Bar value={previews} total={totalMovies} />
+          <div className="text-[11px] text-zinc-500 mt-1 tabular-nums">{withoutPreview} ohne Hörprobe</div>
 
           {statusError && (
             <div className="mt-3 p-3 rounded-xl bg-rose-500/10 border border-rose-500/30 text-rose-200 text-xs flex items-start gap-2">
@@ -118,27 +126,32 @@ export default function ThemeEnrichmentPanel() {
             </div>
           )}
 
-          <button
-            type="button"
-            onClick={onEnrich}
-            disabled={running || starting}
-            className="w-full min-h-[44px] mt-3 px-4 py-2.5 rounded-xl bg-amber-400 text-zinc-950 font-semibold flex items-center justify-center gap-2 disabled:opacity-50 active:scale-[0.98] transition-transform shadow-lg shadow-amber-400/20"
-          >
-            {running ? (
-              <>
-                <Loader2 className="w-4 h-4 animate-spin" />
-                {status.processed} / {status.target} analysiert…
-              </>
-            ) : starting ? (
-              <>
-                <Loader2 className="w-4 h-4 animate-spin" /> Starte…
-              </>
-            ) : (
-              <>
-                <Sparkles className="w-4 h-4" /> {BATCH} weitere analysieren
-              </>
-            )}
-          </button>
+          {running ? (
+            <div className="w-full min-h-[44px] mt-3 px-4 py-2.5 rounded-xl bg-amber-400/90 text-zinc-950 font-semibold flex items-center justify-center gap-2">
+              <Loader2 className="w-4 h-4 animate-spin" />
+              {status.processed} / {status.target} {runLabel}
+            </div>
+          ) : (
+            <div className="grid gap-2 mt-3">
+              <button
+                type="button"
+                onClick={() => runAction(startThemeEnrich)}
+                disabled={starting}
+                className="w-full min-h-[44px] px-4 py-2.5 rounded-xl bg-amber-400 text-zinc-950 font-semibold flex items-center justify-center gap-2 disabled:opacity-50 active:scale-[0.98] transition-transform shadow-lg shadow-amber-400/20"
+              >
+                {starting ? <Loader2 className="w-4 h-4 animate-spin" /> : <Sparkles className="w-4 h-4" />}
+                {BATCH} weitere analysieren
+              </button>
+              <button
+                type="button"
+                onClick={() => runAction(retryThemePreviews)}
+                disabled={starting || withoutPreview === 0}
+                className="w-full min-h-[44px] px-4 py-2.5 rounded-xl bg-zinc-800 text-zinc-100 font-medium flex items-center justify-center gap-2 disabled:opacity-40 active:scale-[0.98] transition-transform"
+              >
+                <Search className="w-4 h-4" /> Hörproben nachsuchen ({withoutPreview})
+              </button>
+            </div>
+          )}
         </>
       )}
     </div>
