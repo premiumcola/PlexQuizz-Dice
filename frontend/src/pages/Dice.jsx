@@ -14,7 +14,6 @@ import Fireworks from '../components/Fireworks';
 import { usePrefs } from '../usePrefs';
 import { plexAppUrl } from '../lib/plexLink';
 
-const ACCENT = '#f5a623';
 const PREFS_KEY = 'plexdice:prefs:v1';
 const LOADING_VERBS = ['ausgegraben', 'zusammengetragen', 'hochgeholt'];
 const FACT_SHOW = 4;
@@ -353,12 +352,6 @@ export default function Dice({ onNeedSettings }) {
           100% { transform: scale(1); opacity: 1; filter: blur(0); }
         }
         .reveal-card { animation: revealCard 0.55s cubic-bezier(0.34, 1.56, 0.64, 1) both; }
-        @keyframes filterPulse {
-          0% { box-shadow: 0 0 0 0 rgba(245,166,35,0); }
-          25% { box-shadow: 0 0 0 3px rgba(245,166,35,0.55); }
-          100% { box-shadow: 0 0 0 0 rgba(245,166,35,0); }
-        }
-        .filter-pulse { border-radius: 12px; animation: filterPulse 1.2s ease-out; }
         .rolling-bg {
           background: linear-gradient(125deg,
             rgba(245,166,35,0.22) 0%, rgba(244,114,182,0.18) 25%,
@@ -369,22 +362,6 @@ export default function Dice({ onNeedSettings }) {
         }
         .glow-pulse { animation: glowPulse 0.9s ease-in-out infinite; }
         .dice-shake { display: inline-block; animation: diceShake 0.4s ease-in-out infinite; }
-        .dual-range-input {
-          position: absolute; top: 0; left: 10px; right: 10px;
-          width: calc(100% - 20px); height: 36px; background: transparent;
-          -webkit-appearance: none; appearance: none; pointer-events: none; outline: none; margin: 0;
-        }
-        .dual-range-input::-webkit-slider-thumb {
-          -webkit-appearance: none; appearance: none; pointer-events: auto;
-          width: 22px; height: 22px; border-radius: 50%; background: ${ACCENT};
-          border: 3px solid #18181b; box-shadow: 0 2px 8px rgba(0,0,0,0.5); cursor: pointer;
-        }
-        .dual-range-input::-moz-range-thumb {
-          pointer-events: auto; width: 22px; height: 22px; border-radius: 50%; background: ${ACCENT};
-          border: 3px solid #18181b; box-shadow: 0 2px 8px rgba(0,0,0,0.5); cursor: pointer;
-        }
-        .dual-range-input::-webkit-slider-runnable-track { background: transparent; height: 36px; }
-        .dual-range-input::-moz-range-track { background: transparent; height: 36px; }
       `}</style>
       <div className="flex flex-col min-h-full bg-zinc-950 text-zinc-100 relative overflow-x-clip">
         {rolling && !reduceMotion && <div className="fixed inset-0 pointer-events-none rolling-bg" />}

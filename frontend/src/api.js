@@ -186,11 +186,16 @@ export function retryThemePreviews(count = 200) {
 export function getThemeSample() {
   return fetch('/api/themes/sample').then(unwrap);
 }
-export function getThemeEligible() {
-  return fetch('/api/themes/eligible').then(unwrap);
+// Optional `filters` (the shared dice-filter criteria) narrows the eligible/question pool.
+function filterQuery(filters, leading = '?') {
+  if (!filters || Object.keys(filters).length === 0) return '';
+  return `${leading}filters=${encodeURIComponent(JSON.stringify(filters))}`;
 }
-export function getThemeQuestion(difficulty = 'medium') {
-  return fetch(`/api/themes/question?difficulty=${encodeURIComponent(difficulty)}`).then(unwrap);
+export function getThemeEligible(filters) {
+  return fetch(`/api/themes/eligible${filterQuery(filters)}`).then(unwrap);
+}
+export function getThemeQuestion(difficulty = 'medium', filters) {
+  return fetch(`/api/themes/question?difficulty=${encodeURIComponent(difficulty)}${filterQuery(filters, '&')}`).then(unwrap);
 }
 export function scoreThemeGuess(questionId, guess) {
   return postJson('/api/themes/score', { question_id: questionId, guess });
@@ -207,8 +212,8 @@ export function themeHint(questionId, level) {
 }
 
 // ---- TV-series themes ----
-export function getSeriesEligible() {
-  return fetch('/api/series/eligible').then(unwrap);
+export function getSeriesEligible(filters) {
+  return fetch(`/api/series/eligible${filterQuery(filters)}`).then(unwrap);
 }
 export function getSeriesCoverage() {
   return fetch('/api/series/coverage').then(unwrap);

@@ -169,3 +169,29 @@ body {
 .animate-quizPageWash {
   animation: quizPageWash 0.28s ease-out forwards;
 }
+
+/* Shared movie-filter sliders (dice page + quiz pre-filter) — dual-handle range thumbs + the
+   "jump to stage" pulse. Global so MovieFilterPanel renders identically wherever it's used. */
+.dual-range-input {
+  position: absolute; top: 0; left: 10px; right: 10px;
+  width: calc(100% - 20px); height: 36px; background: transparent;
+  -webkit-appearance: none; appearance: none; pointer-events: none; outline: none; margin: 0;
+}
+.dual-range-input::-webkit-slider-thumb {
+  -webkit-appearance: none; appearance: none; pointer-events: auto;
+  width: 22px; height: 22px; border-radius: 50%; background: #f5a623;
+  border: 3px solid #18181b; box-shadow: 0 2px 8px rgba(0, 0, 0, 0.5); cursor: pointer;
+}
+.dual-range-input::-moz-range-thumb {
+  pointer-events: auto; width: 22px; height: 22px; border-radius: 50%; background: #f5a623;
+  border: 3px solid #18181b; box-shadow: 0 2px 8px rgba(0, 0, 0, 0.5); cursor: pointer;
+}
+.dual-range-input::-webkit-slider-runnable-track { background: transparent; height: 36px; }
+.dual-range-input::-moz-range-track { background: transparent; height: 36px; }
+
+@keyframes filterPulse {
+  0% { box-shadow: 0 0 0 0 rgba(245, 166, 35, 0); }
+  25% { box-shadow: 0 0 0 3px rgba(245, 166, 35, 0.55); }
+  100% { box-shadow: 0 0 0 0 rgba(245, 166, 35, 0); }
+}
+.filter-pulse { border-radius: 12px; animation: filterPulse 1.2s ease-out; }

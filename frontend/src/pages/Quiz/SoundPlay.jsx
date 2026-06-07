@@ -128,6 +128,7 @@ export default function SoundPlay({ roundId }) {
   const round = useRef(loadRound(roundId)).current;
   const mode = round?.mode || 'sound';
   const difficulty = round?.difficulty || 'medium';
+  const filters = round?.filters || null; // shared dice-style pre-filter for the theme/series pools
   const soundOn = round?.sound_enabled !== false;
   const normalQs = useRef(
     (round?.questions || []).filter((q) => !q.multi_select && q.mode !== 'connect'),
@@ -166,14 +167,14 @@ export default function SoundPlay({ roundId }) {
         if (mode === 'sound') {
           if (alive) setPlan(Array.from({ length: targetSize }, () => 'sound'));
         } else if (mode === 'series') {
-          const el = await getSeriesEligible();
+          const el = await getSeriesEligible(filters);
           seriesPoolRef.current = shuffle(el.shows || []);
           const n = Math.min(targetSize, seriesPoolRef.current.length);
           if (alive) setPlan(Array.from({ length: n }, () => 'series'));
         } else {
           const [themes, series] = await Promise.all([
-            getThemeEligible().catch(() => ({ count: 0 })),
-            getSeriesEligible().catch(() => ({ count: 0, shows: [] })),
+            getThemeEligible(filters).catch(() => ({ count: 0 })),
+            getSeriesEligible(filters).catch(() => ({ count: 0, shows: [] })),
           ]);
           seriesPoolRef.current = shuffle(series.shows || []);
           const includeSound = (themes.count || 0) >= MIN_POOL;
@@ -189,7 +190,7 @@ export default function SoundPlay({ roundId }) {
       }
     })();
     return () => { alive = false; };
-  }, [round, mode, targetSize, normalQs.length]);
+  }, [round, mode, targetSize, normalQs.length, filters]);
 
   // Load the question for the current step.
   useEffect(() => {
@@ -209,7 +210,7 @@ export default function SoundPlay({ roundId }) {
           seriesIdxRef.current += 1;
           if (alive) setCurrent({ type, payload: show });
         } else {
-          const q = await getThemeQuestion(difficulty);
+          const q = await getThemeQuestion(difficulty, filters);
           if (alive) setCurrent({ type, payload: q });
         }
       } catch (e) {
@@ -219,7 +220,7 @@ export default function SoundPlay({ roundId }) {
       }
     })();
     return () => { alive = false; };
-  }, [step, plan, normalQs, difficulty]);
+  }, [step, plan, normalQs, difficulty, filters]);
 
   const onResolved = useCallback((wasCorrect, info) => {
     resultsRef.current.push({

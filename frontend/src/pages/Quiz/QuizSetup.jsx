@@ -1,9 +1,11 @@
 import { useEffect, useState } from 'react';
-import { ArrowLeft, X, Camera, Play, Loader2, AlertCircle, Clapperboard, Music2, Tv, Shuffle, History, Dices } from 'lucide-react';
+import { ArrowLeft, X, Camera, Play, Loader2, AlertCircle, Clapperboard, Music2, Tv, Shuffle, History, Dices, SlidersHorizontal, ChevronDown, ChevronUp } from 'lucide-react';
 import { navigate } from '../../router';
-import { quizNewRound, quizUploadPhoto, quizGetConfig, quizPlayers, getThemeEligible, getSeriesEligible } from '../../api';
+import { quizNewRound, quizUploadPhoto, quizGetConfig, quizPlayers, getThemeEligible, getSeriesEligible, getLibrary } from '../../api';
 import { saveRound } from './store';
 import { initAudio } from './audio';
+import MovieFilterPanel from '../../components/MovieFilterPanel';
+import { useMovieFilters, RUNTIME_MIN_BOUND, RUNTIME_MAX_BOUND } from '../../components/movieFilters';
 
 const SIZES = [20, 50, 100];
 const MIN_POOL = 8; // Sound / Series / Mixed need at least this many eligible items
@@ -46,6 +48,9 @@ export default function QuizSetup() {
   const [uploading, setUploading] = useState(false);
   const [starting, setStarting] = useState(false);
   const [error, setError] = useState('');
+  const [movies, setMovies] = useState([]); // for the shared pre-filter (histograms + bounds)
+  const [showFilters, setShowFilters] = useState(false);
+  const filters = useMovieFilters(movies);
 
   useEffect(() => {
     quizGetConfig()
@@ -55,9 +60,16 @@ export default function QuizSetup() {
       })
       .catch(() => {});
     quizPlayers().then((d) => setRoster(d.players || [])).catch(() => {});
-    getThemeEligible().then((d) => setThemeCount(d.count || 0)).catch(() => setThemeCount(0));
-    getSeriesEligible().then((d) => setSeriesCount(d.count || 0)).catch(() => setSeriesCount(0));
+    getLibrary().then((d) => setMovies(d.movies || [])).catch(() => {});
   }, []);
+
+  // Eligible counts reflect the active pre-filter — re-fetched whenever the criteria change.
+  const criteriaKey = JSON.stringify(filters.criteria);
+  useEffect(() => {
+    getThemeEligible(filters.criteria).then((d) => setThemeCount(d.count || 0)).catch(() => setThemeCount(0));
+    getSeriesEligible(filters.criteria).then((d) => setSeriesCount(d.count || 0)).catch(() => setSeriesCount(0));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [criteriaKey]);
 
   const themesReady = (themeCount ?? 0) >= MIN_POOL;
   const seriesReady = (seriesCount ?? 0) >= MIN_POOL;
@@ -104,18 +116,21 @@ export default function QuizSetup() {
     setStarting(true);
     setError('');
     const setup = { name: name.trim(), playerNames: players, photoId };
+    // Shared dice-style pre-filter, applied to the round's pool (omitted when nothing is active).
+    const criteria = filters.criteria;
+    const filterPayload = Object.keys(criteria).length ? criteria : null;
     try {
       if (mode === 'sound' || mode === 'series') {
         // Pure client-sequenced sound/series round (no server session needed).
         const rid = `${mode === 'series' ? 'r' : 's'}${Date.now()}`;
-        saveRound(rid, { mode, difficulty, size, sound_enabled: true, setup });
+        saveRound(rid, { mode, difficulty, size, sound_enabled: true, setup, filters: filterPayload });
         navigate(`/quiz/sound/${rid}`);
         return;
       }
       // normal + mixed both generate a server round (normal questions); mixed interleaves
       // sound questions client-side over those, scored client-side.
-      const resp = await quizNewRound({ size, difficulty, name: name.trim() });
-      saveRound(resp.round_id, { ...resp, mode, setup });
+      const resp = await quizNewRound({ size, difficulty, name: name.trim(), filters: filterPayload });
+      saveRound(resp.round_id, { ...resp, mode, setup, filters: filterPayload });
       navigate(`${mode === 'mixed' ? '/quiz/sound' : '/quiz/play'}/${resp.round_id}`);
     } catch (e) {
       setError(e.message || 'Runde konnte nicht gestartet werden');
@@ -139,6 +154,46 @@ export default function QuizSetup() {
         </header>
 
         <div className="space-y-6">
+          {/* Shared dice-style pre-filter (collapsed) — narrows the round's pool before starting. */}
+          {movies.length > 0 && (
+            <div>
+              <button
+                type="button"
+                onClick={() => setShowFilters((s) => !s)}
+                aria-expanded={showFilters}
+                className="w-full flex items-center gap-2 px-4 min-h-[48px] rounded-2xl bg-zinc-900 ring-1 ring-zinc-800 active:scale-[0.99] transition-transform"
+              >
+                <SlidersHorizontal className="w-4 h-4 text-zinc-400 shrink-0" />
+                <span className="text-sm font-medium text-zinc-200">Pool filtern</span>
+                {filters.activeFilterCount > 0 && (
+                  <span className="px-1.5 py-0.5 rounded-full bg-amber-400 text-zinc-950 text-xs font-bold tabular-nums">{filters.activeFilterCount}</span>
+                )}
+                <span className="ml-auto flex items-center gap-2 text-sm tabular-nums">
+                  <span className="text-amber-400 font-semibold">{filters.filtered.length}</span>
+                  <span className="text-zinc-600">/ {movies.length}</span>
+                  {showFilters ? <ChevronUp className="w-4 h-4 text-zinc-400" /> : <ChevronDown className="w-4 h-4 text-zinc-400" />}
+                </span>
+              </button>
+              {showFilters && (
+                <div className="mt-2 p-4 rounded-2xl bg-zinc-900/60 ring-1 ring-zinc-800 max-h-[60dvh] overflow-y-auto overscroll-contain">
+                  <MovieFilterPanel
+                    movies={movies}
+                    genreGroups={filters.genreGroups} setGenreGroups={filters.setGenreGroups} allGenres={filters.allGenres}
+                    watched={filters.watched} setWatched={filters.setWatched}
+                    yearBounds={filters.yearBounds} effYearMin={filters.effYearMin} effYearMax={filters.effYearMax}
+                    setYearMin={filters.setYearMin} setYearMax={filters.setYearMax}
+                    runtimeMin={filters.runtimeMin} runtimeMax={filters.runtimeMax}
+                    setRuntimeMin={filters.setRuntimeMin} setRuntimeMax={filters.setRuntimeMax}
+                    RUNTIME_MIN_BOUND={RUNTIME_MIN_BOUND} RUNTIME_MAX_BOUND={RUNTIME_MAX_BOUND}
+                    fskMin={filters.fskMin} fskMax={filters.fskMax} setFskMin={filters.setFskMin} setFskMax={filters.setFskMax}
+                    ratingMin={filters.ratingMin} ratingMax={filters.ratingMax} setRatingMin={filters.setRatingMin} setRatingMax={filters.setRatingMax}
+                    onReset={filters.reset}
+                  />
+                </div>
+              )}
+            </div>
+          )}
+
           <div>
             <label className="text-sm font-medium text-zinc-200 uppercase tracking-wide mb-2 block">Modus</label>
             <div className="grid grid-cols-2 gap-2">
