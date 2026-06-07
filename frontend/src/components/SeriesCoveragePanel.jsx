@@ -49,7 +49,7 @@ export default function SeriesCoveragePanel() {
       ) : (
         <>
           <p className="text-xs text-zinc-400 mb-2 tabular-nums">
-            {withTheme} von {total} abgedeckt ({percent}%)
+            Plex-Scan: {withTheme} / {total} Serien mit Theme ({percent}%)
           </p>
           <div className="h-2 rounded-full bg-zinc-800 overflow-hidden">
             <div className="h-full bg-amber-400 rounded-full transition-[width] duration-500" style={{ width: `${total ? (withTheme / total) * 100 : 0}%` }} />
