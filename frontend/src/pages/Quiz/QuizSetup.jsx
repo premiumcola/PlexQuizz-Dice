@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { ArrowLeft, X, Camera, Play, Loader2, AlertCircle, Clapperboard, Music2, Tv, Shuffle, History } from 'lucide-react';
+import { ArrowLeft, X, Camera, Play, Loader2, AlertCircle, Clapperboard, Music2, Tv, Shuffle, History, Dices } from 'lucide-react';
 import { navigate } from '../../router';
 import { quizNewRound, quizUploadPhoto, quizGetConfig, quizPlayers, getThemeEligible, getSeriesEligible } from '../../api';
 import { saveRound } from './store';
@@ -20,10 +20,21 @@ const DIFFS = [
   { v: 'mixed', label: '🎲 Mixed' },
 ];
 
+// Fun German round names, pre-filled so the player never has to type one (still editable).
+const ROUND_NAMES = [
+  'Filmabend', 'Kinorunde', 'Popcorn-Session', 'Couch-Kino', 'Leinwand-Nacht',
+  'Film-Battle', 'Movie-Quiz', 'Cineasten-Runde', 'Streaming-Abend', 'Blockbuster-Night',
+];
+function randomRoundName() {
+  const base = ROUND_NAMES[Math.floor(Math.random() * ROUND_NAMES.length)];
+  return `${base} #${Math.floor(Math.random() * 99) + 1}`;
+}
+
 export default function QuizSetup() {
-  const [name, setName] = useState('');
+  const [name, setName] = useState(() => randomRoundName());
   const [players, setPlayers] = useState([]);
   const [playerInput, setPlayerInput] = useState('');
+  const [playerFocused, setPlayerFocused] = useState(false);
   const [roster, setRoster] = useState([]); // shared saved names (server-side), reusable quick-picks
   const [size, setSize] = useState(50);
   const [difficulty, setDifficulty] = useState('medium');
@@ -56,6 +67,11 @@ export default function QuizSetup() {
     if (need === 'either') return themesReady || seriesReady;
     return true;
   };
+
+  // Saved roster names not yet added, filtered case-insensitively by the current input.
+  const playerSuggestions = roster.filter(
+    (p) => !players.includes(p) && p.toLowerCase().includes(playerInput.trim().toLowerCase()),
+  );
 
   const addPlayer = () => {
     const p = playerInput.trim();
@@ -157,12 +173,22 @@ export default function QuizSetup() {
 
           <div>
             <label className="text-sm font-medium text-zinc-200 uppercase tracking-wide mb-2 block">Rundenname</label>
-            <input
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-              placeholder="Filmabend bei Roman"
-              className="w-full px-4 py-3 rounded-xl bg-zinc-900 ring-1 ring-zinc-800 text-zinc-100 placeholder-zinc-600 outline-none focus:ring-2 focus:ring-amber-400/60"
-            />
+            <div className="flex items-center gap-2">
+              <input
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+                placeholder="Filmabend bei Roman"
+                className="flex-1 min-w-0 px-4 py-3 rounded-xl bg-zinc-900 ring-1 ring-zinc-800 text-zinc-100 placeholder-zinc-600 outline-none focus:ring-2 focus:ring-amber-400/60"
+              />
+              <button
+                type="button"
+                onClick={() => setName(randomRoundName())}
+                aria-label="Neuen Namen würfeln"
+                className="w-12 h-12 shrink-0 rounded-xl bg-zinc-900 ring-1 ring-zinc-800 text-amber-400 flex items-center justify-center active:scale-95 transition-transform"
+              >
+                <Dices className="w-5 h-5" />
+              </button>
+            </div>
           </div>
 
           <div>
@@ -179,28 +205,33 @@ export default function QuizSetup() {
                 ))}
               </div>
             )}
-            <input
-              value={playerInput}
-              onChange={(e) => setPlayerInput(e.target.value)}
-              onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); addPlayer(); } }}
-              placeholder="Name + Enter"
-              className="w-full px-4 py-3 rounded-xl bg-zinc-900 ring-1 ring-zinc-800 text-zinc-100 placeholder-zinc-600 outline-none focus:ring-2 focus:ring-amber-400/60"
-            />
-            {/* Shared, reusable saved names — tap to add this player to the round. */}
-            {roster.filter((p) => !players.includes(p)).length > 0 && (
-              <div className="flex flex-wrap gap-2 mt-2">
-                {roster.filter((p) => !players.includes(p)).map((p) => (
-                  <button
-                    key={p}
-                    type="button"
-                    onClick={() => pickPlayer(p)}
-                    className="px-3 py-1.5 rounded-full bg-zinc-800 text-zinc-200 text-sm ring-1 ring-zinc-700 active:scale-95 transition-transform"
-                  >
-                    {p}
-                  </button>
-                ))}
-              </div>
-            )}
+            {/* Focusing the field reveals matching saved names as tappable suggestions. */}
+            <div className="relative">
+              <input
+                value={playerInput}
+                onChange={(e) => setPlayerInput(e.target.value)}
+                onFocus={() => setPlayerFocused(true)}
+                onBlur={() => setTimeout(() => setPlayerFocused(false), 120)}
+                onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); addPlayer(); } }}
+                placeholder="Name + Enter"
+                className="w-full px-4 py-3 rounded-xl bg-zinc-900 ring-1 ring-zinc-800 text-zinc-100 placeholder-zinc-600 outline-none focus:ring-2 focus:ring-amber-400/60"
+              />
+              {playerFocused && playerSuggestions.length > 0 && (
+                <div className="absolute z-20 left-0 right-0 mt-1 rounded-xl bg-zinc-900 ring-1 ring-zinc-700 shadow-lg shadow-black/40 overflow-hidden max-h-56 overflow-y-auto">
+                  {playerSuggestions.map((p) => (
+                    <button
+                      key={p}
+                      type="button"
+                      onMouseDown={(e) => e.preventDefault()}
+                      onClick={() => { pickPlayer(p); setPlayerInput(''); }}
+                      className="w-full min-h-[44px] px-4 text-left text-zinc-200 active:bg-zinc-800 flex items-center border-b border-zinc-800/60 last:border-b-0"
+                    >
+                      {p}
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
           </div>
 
           <div>
