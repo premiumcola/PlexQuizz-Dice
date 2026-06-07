@@ -1,6 +1,9 @@
 """Film-music theme enrichment API: run background batches, report status, list eligible."""
 from __future__ import annotations
 
+import json
+from typing import Any, Dict, Optional
+
 from flask import Blueprint, jsonify, request
 
 import quiz_hints
@@ -8,6 +11,18 @@ import theme_enrichment
 import theme_quiz
 
 bp = Blueprint("themes", __name__, url_prefix="/api/themes")
+
+
+def _parse_filters() -> Optional[Dict[str, Any]]:
+    """Decode the optional ?filters=<json> dice-style pre-filter (None when absent/invalid)."""
+    raw = request.args.get("filters")
+    if not raw:
+        return None
+    try:
+        data = json.loads(raw)
+    except (ValueError, TypeError):
+        return None
+    return data if isinstance(data, dict) and data else None
 
 
 @bp.post("/enrich")
@@ -52,8 +67,8 @@ def retry_previews():
 
 @bp.get("/eligible")
 def eligible():
-    """Ids (and count) of cached movies that have a streamable preview."""
-    ids = theme_enrichment.list_eligible()
+    """Ids (and count) of cached movies with a streamable preview, optionally pre-filtered."""
+    ids = theme_quiz.eligible_ids(_parse_filters())
     return jsonify({"count": len(ids), "ids": ids})
 
 
@@ -61,7 +76,7 @@ def eligible():
 def question():
     """A sound question: {question_id, preview_url, difficulty}. Leaks NO answer text."""
     difficulty = (request.args.get("difficulty") or "medium").strip().lower()
-    payload = theme_quiz.new_question(difficulty)
+    payload = theme_quiz.new_question(difficulty, _parse_filters())
     if payload is None:
         return jsonify({"error": "Keine Film-Themes verfügbar"}), 404
     return jsonify(payload)

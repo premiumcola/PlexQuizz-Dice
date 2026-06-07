@@ -13,11 +13,12 @@ import random
 import threading
 import uuid
 from datetime import datetime, timezone
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Tuple
 from urllib.parse import quote
 
 import fuzzy_match
 import theme_enrichment
+from quiz.filters import matches as movie_matches
 from services import library_cache
 
 logger = logging.getLogger(__name__)
@@ -74,11 +75,21 @@ def _acceptable_titles(movie_id: str, entry: Dict[str, Any]) -> List[str]:
     return out
 
 
-def new_question(difficulty: str = "medium") -> Optional[Dict[str, Any]]:
-    """Create a question from a random eligible movie; None when none are eligible."""
+def _eligible_entries(filters: Optional[Dict[str, Any]] = None) -> List[Tuple[str, Dict[str, Any]]]:
+    """(movie_id, entry) for every theme with a streamable preview, optionally narrowed by the
+    shared dice-style filter (joined to the movie metadata by key)."""
     cache = theme_enrichment.load_theme_cache()
     eligible = [(mid, e) for mid, e in cache.items()
                 if isinstance(e, dict) and e.get("preview_url")]
+    if not filters:
+        return eligible
+    by_key = {str(m.get("key")): m for m in library_cache.movies()}
+    return [(mid, e) for mid, e in eligible if movie_matches(by_key.get(str(mid)) or {}, filters)]
+
+
+def new_question(difficulty: str = "medium", filters: Optional[Dict[str, Any]] = None) -> Optional[Dict[str, Any]]:
+    """Create a question from a random eligible movie; None when none are eligible."""
+    eligible = _eligible_entries(filters)
     if not eligible:
         return None
     movie_id, entry = random.choice(eligible)
@@ -158,6 +169,11 @@ def reveal(question_id: str) -> Optional[Dict[str, Any]]:
     return question.get("reveal") if question is not None else None
 
 
-def eligible_count() -> int:
+def eligible_ids(filters: Optional[Dict[str, Any]] = None) -> List[str]:
+    """Ids of movies eligible for the theme quiz, optionally narrowed by the shared filter."""
+    return [mid for mid, _ in _eligible_entries(filters)]
+
+
+def eligible_count(filters: Optional[Dict[str, Any]] = None) -> int:
     """Number of movies eligible for the theme quiz (have a streamable preview)."""
-    return len(theme_enrichment.list_eligible())
+    return len(_eligible_entries(filters))

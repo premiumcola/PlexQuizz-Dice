@@ -15,9 +15,11 @@ requests and never appears in any response body, header, or log line (redacted t
 """
 from __future__ import annotations
 
+import json
 import logging
 import threading
 from datetime import datetime, timezone
+from typing import Any, Dict, Optional
 from urllib.parse import urljoin
 
 import requests
@@ -27,10 +29,23 @@ import quiz_hints
 import series_cache
 import series_quiz
 import series_scan
+from quiz.filters import year_ok
 from services import plex_client, settings_store
 
 logger = logging.getLogger(__name__)
 bp = Blueprint("series", __name__, url_prefix="/api/series")
+
+
+def _parse_filters() -> Optional[Dict[str, Any]]:
+    """Decode the optional ?filters=<json> dice-style pre-filter (None when absent/invalid)."""
+    raw = request.args.get("filters")
+    if not raw:
+        return None
+    try:
+        data = json.loads(raw)
+    except (ValueError, TypeError):
+        return None
+    return data if isinstance(data, dict) and data else None
 
 _PROXY_TIMEOUT = 20
 _STALE_HOURS = 24
@@ -113,9 +128,13 @@ def bootstrap_if_empty() -> None:
 
 @bp.get("/eligible")
 def eligible():
-    """Shows WITH a theme (the quiz pool). Triggers a background scan if empty/stale."""
+    """Shows WITH a theme (the quiz pool). Triggers a background scan if empty/stale.
+
+    Series carry only title/year, so the shared dice filter applies its YEAR range here and ignores
+    the rest (genre/runtime/FSK/rating) rather than emptying the pool."""
     cache = series_cache.load_cache()
     _maybe_autoscan(cache)
+    filters = _parse_filters()
     shows = [
         {
             "ratingKey": s.get("ratingKey"),
@@ -125,7 +144,7 @@ def eligible():
             "thumb_url": f"/api/series/thumb/{s.get('ratingKey')}" if s.get("thumb") else None,
         }
         for s in cache.get("shows", [])
-        if s.get("has_theme") and s.get("ratingKey") is not None
+        if s.get("has_theme") and s.get("ratingKey") is not None and year_ok(s.get("year"), filters)
     ]
     return jsonify({"count": len(shows), "shows": shows})
 

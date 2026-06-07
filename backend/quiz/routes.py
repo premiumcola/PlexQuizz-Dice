@@ -8,6 +8,7 @@ from datetime import datetime, timezone
 from flask import Blueprint, jsonify, request, send_file
 
 from quiz import photos
+from quiz.filters import apply_filters
 from quiz.generator import QuizGenerator
 from quiz.history import History
 from quiz.leaderboard import Leaderboard
@@ -61,9 +62,13 @@ def new_round():
     difficulty = body.get("difficulty") or cfg.get("default_difficulty") or "medium"
     enabled_modes = body.get("enabled_modes") or body.get("modes") or (cfg.get("enabled_modes") or None)
     name = (body.get("name") or "").strip() or None
+    # Shared dice-style pre-filter: restrict the candidate movies (stems AND distractors) before the
+    # generator builds the round, so a filtered round contains only matching films.
+    criteria = body.get("filters") if isinstance(body.get("filters"), dict) else None
 
     status = library_cache.status()
-    generator = QuizGenerator(library_cache.movies(), status)
+    movies = apply_filters(library_cache.movies(), criteria)
+    generator = QuizGenerator(movies, status)
     # Connect ("Verbinden") rounds are a configurable minority of the run; excluding "connect" from
     # enabled_modes turns them off. Default ~20%.
     connect_share = 0.0 if (enabled_modes and "connect" not in enabled_modes) else float(cfg.get("connect_share", 0.2))
