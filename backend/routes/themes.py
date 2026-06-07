@@ -84,4 +84,4 @@ def hint():
         return jsonify({"error": "Frage abgelaufen"}), 404
     level = body.get("level", 1)
     level = int(level) if isinstance(level, (int, float)) and not isinstance(level, bool) else 1
-    return jsonify(quiz_hints.reveal_letters(target, max(1, level)))
+    return jsonify(quiz_hints.reveal_letters(target, max(0, level)))

@@ -36,7 +36,13 @@ def _spread_order(n: int) -> List[int]:
 
 
 def _hint_count(level: int, letters: int) -> int:
-    """How many letters to reveal at ``level`` — monotonic, >=1, and never all of them."""
+    """How many letters to reveal at ``level`` — monotonic and never all of them.
+
+    Level 0 reveals NO letters (just the skeleton: length + spaces/punctuation), which the
+    letter-tile UI uses to lay out the board before the first hint.
+    """
+    if level <= 0:
+        return 0
     if letters >= 3:
         cap = letters - 2
     elif letters == 2:
@@ -57,7 +63,7 @@ def reveal_letters(answer: str, level: int) -> Dict[str, Any]:
     answer = answer or ""
     n = len(answer)
     letter_idx = [i for i, ch in enumerate(answer) if ch.isalnum()]
-    count = _hint_count(max(1, int(level)), len(letter_idx))
+    count = _hint_count(max(0, int(level)), len(letter_idx))
     chosen = {letter_idx[r] for r in _spread_order(len(letter_idx))[:count]}
     revealed = [
         {"index": i, "char": ch}
