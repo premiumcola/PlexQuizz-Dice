@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { Check, X, ArrowLeft, Loader2, Play, Film } from 'lucide-react';
 import { navigate } from '../../router';
 import { quizSolutions } from '../../api';
+import { loadResults } from './store';
 
 // V2.2 — Auflösung: the correct answer (title + cover) for EVERY question of a finished/quit
 // round, including the ones the player missed, each marked right (first try) / wrong.
@@ -11,6 +12,13 @@ export default function QuizSolutions({ roundId }) {
 
   useEffect(() => {
     let alive = true;
+    // Client-sequenced sound/series/mixed rounds store their per-question Auflösung locally
+    // (no server session); prefer it, falling back to the server endpoint for normal rounds.
+    const local = loadResults(roundId);
+    if (local && Array.isArray(local.solutions)) {
+      setSolutions(local.solutions);
+      return () => { alive = false; };
+    }
     quizSolutions(roundId)
       .then((d) => { if (alive) setSolutions(d.solutions || []); })
       .catch((e) => { if (alive) setError(e.status === 409 ? 'Runde läuft noch' : (e.message || 'Auflösung nicht verfügbar')); });

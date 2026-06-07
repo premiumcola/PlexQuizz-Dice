@@ -73,6 +73,10 @@ export const MODE_LABEL = {
   two_actors_to_shared: 'Zwei Stars → Film',
   collection_member: 'Filmreihe',
   connect: 'Verbinden',
+  // Client-sequenced round types (sound/series/mixed) — for the per-mode result breakdown.
+  sound: 'Sound',
+  series: 'Serien-Themes',
+  normal: 'Normale Fragen',
 };
 
 // Short uppercase category for the progress chip strip's active tile — derived from the existing

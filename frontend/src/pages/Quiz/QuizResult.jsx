@@ -89,6 +89,9 @@ export default function QuizResult({ roundId }) {
   const correct = stats?.first_try ?? answers.filter((a) => a.correct).length;
   const maxScore = size * 100;
   const accuracy = maxScore ? results.score / maxScore : 0;
+  // Client-sequenced sound/series/mixed rounds carry no server session: render purely from the
+  // client-collected results and skip the quizComplete/history path; only the leaderboard is shared.
+  const sessionless = !!results.sessionless;
 
   // Placement among saved rounds. This round may not be persisted yet, so rank against the OTHERS
   // (by id) and add it in — gives a stable "Platz X von Y" both before and after saving.
@@ -148,21 +151,32 @@ export default function QuizResult({ roundId }) {
     }
   };
 
+  // Submit one shared-leaderboard entry per player (the backend adds new names to the roster).
+  const submitLeaderboard = () => {
+    const names = (setup.playerNames && setup.playerNames.length ? setup.playerNames : [setup.name]).filter(Boolean);
+    return Promise.all(names.map((p) => quizSubmitScore({
+      name: p, score: results.score, correct, wrong: Math.max(0, size - correct), size,
+    }).catch(() => {})));
+  };
+
   const save = async () => {
     if (saving) return;
     setSaving(true);
     setSaveError(false);
+    if (sessionless) {
+      // No server session/history to complete — just publish the shared leaderboard entries.
+      await submitLeaderboard();
+      clearRound(roundId);
+      navigate('/quiz/history');
+      return;
+    }
     try {
       await quizComplete(roundId, {
         name: setup.name,
         player_names: setup.playerNames || [],
         photo_id: photoId || null,
       });
-      // Submit one shared-leaderboard entry per player (the backend adds new names to the roster).
-      const names = (setup.playerNames && setup.playerNames.length ? setup.playerNames : [setup.name]).filter(Boolean);
-      await Promise.all(names.map((p) => quizSubmitScore({
-        name: p, score: results.score, correct, wrong: Math.max(0, size - correct), size,
-      }).catch(() => {})));
+      await submitLeaderboard();
       clearRound(roundId);
       navigate(`/quiz/history?saved=${roundId}`);
     } catch {
