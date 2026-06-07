@@ -25,6 +25,7 @@ def _show_entry(show: Any) -> Dict[str, Any]:
         "ratingKey": int(rating_key) if rating_key is not None else None,
         "guid": getattr(show, "guid", None),
         "thumb": getattr(show, "thumb", None),
+        "art": getattr(show, "art", None),  # wide backdrop for the blurred fanart hint
         "theme_path": theme_path,
         "has_theme": bool(theme_path),
     }

@@ -170,10 +170,14 @@ def coverage():
 
 @bp.get("/thumb/<int:rating_key>")
 def thumb(rating_key: int):
-    """Proxy a show's poster so the Plex token never reaches the browser."""
+    """Proxy a show's poster (or backdrop art with ?art=1) so the Plex token never reaches the
+    browser. Art falls back to the poster when a show has no cached backdrop."""
     cache = series_cache.load_cache()
     show = next((s for s in cache.get("shows", []) if s.get("ratingKey") == rating_key), None)
-    path = show.get("thumb") if show else None
+    if show and request.args.get("art"):
+        path = show.get("art") or show.get("thumb")
+    else:
+        path = show.get("thumb") if show else None
     base, token, _ = _plex_base_token()
     if not path or not base or not token:
         return jsonify({"error": "not found"}), 404
