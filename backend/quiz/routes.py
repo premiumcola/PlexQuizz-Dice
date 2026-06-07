@@ -178,7 +178,10 @@ def complete(round_id: str):
 
 @bp.delete("/round/<round_id>")
 def abandon(round_id: str):
-    sessions.drop(round_id)
+    # Mark ended (don't drop) so the end-of-round Auflösung can still resolve every answer.
+    session = sessions.get(round_id)
+    if session is not None:
+        session.ended = True
     return jsonify({"ok": True})
 
 

@@ -70,11 +70,16 @@ class Session:
         self._visit_count: int = 1 if order else 0
         self.started_at_utc: Optional[str] = None
         self.completed_at_utc: Optional[str] = None
+        self.ended = False  # set on abandon — keeps the session alive for the Auflösung
 
     # ---- Mastery flow ----
 
     def _all_resolved(self) -> bool:
         return bool(self.order) and all(s["resolved"] for s in self.status.values())
+
+    def is_over(self) -> bool:
+        """True once the round is finished (all resolved) or explicitly ended/abandoned."""
+        return self.ended or self._all_resolved()
 
     def _advance(self) -> Optional[Dict[str, str]]:
         """Serve the next question: remaining first visits in order, then the retry
