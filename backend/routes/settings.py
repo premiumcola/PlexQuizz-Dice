@@ -54,6 +54,7 @@ def test_connection():
                 "server_name": server.friendlyName,
                 "version": server.version,
                 "library_sections": plex_client.list_library_sections(server),
+                "tv_sections": plex_client.list_tv_sections(server),
             }
         )
     except Exception as exc:  # noqa: BLE001

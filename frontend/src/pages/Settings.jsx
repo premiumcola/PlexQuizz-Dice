@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 import {
   Server, RefreshCw, Loader2, Check, AlertCircle, Save, Library,
   Settings as SettingsIcon, Database, Plug, LogOut, Clipboard,
-  ExternalLink, Github, Activity, ShieldCheck, Trash2,
+  ExternalLink, Github, Activity, ShieldCheck, Trash2, Tv,
 } from 'lucide-react';
 import {
   getSettings, saveSettings, discoverServers, testConnection, refreshLibrary,
@@ -159,6 +159,7 @@ export default function Settings({ onConnected }) {
   const [testError, setTestError] = useState('');
 
   const [sections, setSections] = useState([]);
+  const [tvSections, setTvSections] = useState([]);
   const [selectedLibraries, setSelectedLibraries] = useState([]);
 
   const [saving, setSaving] = useState(false);
@@ -304,6 +305,7 @@ export default function Settings({ onConnected }) {
     setTestResult(null);
     try {
       const res = await testConnection({ url: composeUrl(), ssl });
+      setTvSections(res.tv_sections || []);
       setTestResult(res);
       setSections(res.library_sections || []);
     } catch (e) {
@@ -771,6 +773,26 @@ export default function Settings({ onConnected }) {
                   Nach Update der Server-URL bitte synchronisieren — sonst zeigen ältere Filme noch alte Deep-links.
                 </p>
               </>
+            )}
+
+            {user && tvSections.length > 0 && (
+              <div className="mt-6">
+                <h3 className="text-sm font-semibold text-zinc-200 mb-1 flex items-center gap-2">
+                  <Tv className="w-4 h-4 text-amber-400" /> Serien-Bibliotheken
+                </h3>
+                <p className="text-xs text-zinc-500 mb-3">
+                  Werden automatisch für das Serien-Themen-Quiz gescannt (keine Auswahl nötig).
+                </p>
+                <div className="grid grid-cols-2 gap-3">
+                  {tvSections.map((sec) => (
+                    <div key={sec.id} className="p-4 rounded-2xl bg-zinc-900/60 border-2 border-zinc-800">
+                      <Tv className="w-5 h-5 text-zinc-500" />
+                      <div className="mt-2 font-medium text-zinc-100 truncate">{sec.title}</div>
+                      <div className="text-xs text-zinc-500">ID {sec.id}</div>
+                    </div>
+                  ))}
+                </div>
+              </div>
             )}
 
             {syncResult && (

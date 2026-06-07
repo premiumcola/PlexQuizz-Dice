@@ -145,6 +145,15 @@ class PlexClient:
             if section.type == "movie"
         ]
 
+    def list_tv_sections(self, server: PlexServer) -> List[Dict[str, Any]]:
+        """Show-type sections — surfaced read-only in Settings (the series scan reads them
+        automatically; they are NOT part of the movie-library selection)."""
+        return [
+            {"id": str(section.key), "title": section.title}
+            for section in server.library.sections()
+            if section.type == "show"
+        ]
+
     def fetch_all_movies(
         self,
         server: PlexServer,
