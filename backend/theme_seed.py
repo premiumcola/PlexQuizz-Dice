@@ -32,6 +32,7 @@ _USABLE_CONFIDENCE = {"high", "medium", "low"}
 
 # Cached once after the first load() (also primed at import time, see bottom).
 _seed: Optional[Dict[str, dict]] = None
+_seed_source: Optional[str] = None  # the candidate path the seed actually loaded from
 
 
 def _log_breakdown(seed: Dict[str, dict]) -> None:
@@ -54,7 +55,7 @@ def load_seed() -> Dict[str, dict]:
     Returns an empty dict (never raises) when no candidate exists or all are malformed, so a
     missing seed simply degrades to the Haiku-only path.
     """
-    global _seed
+    global _seed, _seed_source
     if _seed is not None:
         return _seed
     for path in _SEED_CANDIDATES:
@@ -67,6 +68,7 @@ def load_seed() -> Dict[str, dict]:
             logger.error("theme_seed: could not read %s: %s", path, exc)
             continue
         _seed = data if isinstance(data, dict) else {}
+        _seed_source = str(path)
         logger.info("theme_seed source: %s", path)
         _log_breakdown(_seed)
         return _seed
@@ -95,6 +97,22 @@ def lookup(title: str, original_title: Optional[str]) -> Optional[dict]:
         if isinstance(entry, dict) and str(entry.get("confidence") or "").strip().lower() in _USABLE_CONFIDENCE:
             return entry
     return None
+
+
+def seed_size() -> int:
+    """Number of entries in the loaded seed (0 if none loaded)."""
+    return len(load_seed())
+
+
+def seed_path() -> Optional[str]:
+    """The candidate path the seed loaded from, or None if no seed was found."""
+    load_seed()
+    return _seed_source
+
+
+def is_loaded() -> bool:
+    """True when a non-empty seed is loaded."""
+    return bool(load_seed())
 
 
 # Prime the cache (and emit the load log) once at import time.
