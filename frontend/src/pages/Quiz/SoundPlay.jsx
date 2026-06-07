@@ -1,17 +1,50 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { LogOut, Loader2, Trophy, Music4 } from 'lucide-react';
 import { navigate } from '../../router';
-import { getThemeQuestion } from '../../api';
+import { getThemeQuestion, getThemeEligible, getSeriesEligible } from '../../api';
 import { loadRound, clearRound } from './store';
 import { initAudio, preloadSounds, setSoundEnabled } from './audio';
 import SoundQuestion from './SoundQuestion';
+import SeriesQuestion from './SeriesQuestion';
 
-// L4 — client-sequenced player for the "Nur Sound" and "Mixed" modes. Sound questions use the
-// standalone /api/themes/* endpoints (no server round/session); for "Mixed" the normal questions
-// come pre-generated in the stored round and are scored client-side from correct_option_id, so
-// the polished server-session QuizPlay stays untouched. dvh-locked single screen, no page scroll.
+// L4 + T2 — client-sequenced player for "Nur Sound", "Serien-Themes" and "Mixed". Sound + series
+// questions use the standalone /api/themes/* and /api/series/* endpoints (no server session); for
+// "Mixed" the normal questions come pre-generated in the stored round and are scored client-side
+// from correct_option_id, so the polished server-session QuizPlay stays untouched. dvh single
+// screen, no page scroll.
 
 const REVEAL_MS = 1800;
+const MIN_POOL = 8;
+
+function shuffle(arr) {
+  const a = [...arr];
+  for (let i = a.length - 1; i > 0; i -= 1) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [a[i], a[j]] = [a[j], a[i]];
+  }
+  return a;
+}
+
+// Mixed plan: round-robin over the available content types, honouring per-type caps
+// (normal ≤ normalCount, series ≤ seriesCount, sound effectively unlimited).
+function buildMixedPlan(size, normalCount, includeSound, includeSeries, seriesCount) {
+  const caps = {
+    sound: includeSound ? Infinity : 0,
+    normal: normalCount,
+    series: includeSeries ? seriesCount : 0,
+  };
+  const order = ['sound', 'normal', 'series'];
+  const used = { sound: 0, normal: 0, series: 0 };
+  const plan = [];
+  let oi = 0;
+  let guard = 0;
+  while (plan.length < size && guard < size * 6) {
+    const t = order[oi % order.length];
+    oi += 1; guard += 1;
+    if (used[t] < caps[t]) { plan.push(t); used[t] += 1; }
+  }
+  return plan.length ? plan : Array.from({ length: Math.min(size, normalCount) }, () => 'normal');
+}
 
 // Compact normal-question card for Mixed rounds (single-select). Reveal-on-correct only.
 function NormalCard({ q, onResolved }) {
@@ -29,14 +62,13 @@ function NormalCard({ q, onResolved }) {
   };
 
   const stem = q.stem || {};
-  const stemImage = stem.kind === 'image';
   const imageOptions = (q.options || []).some((o) => o.kind === 'image');
 
   return (
     <div className="flex flex-col h-full min-h-0">
       <div className="shrink-0 mb-3">
         {stem.caption && <div className="text-xs uppercase tracking-wide text-zinc-500 mb-1">{stem.caption}</div>}
-        {stemImage ? (
+        {stem.kind === 'image' ? (
           <img src={stem.content} alt="" className="max-h-[28vh] w-auto mx-auto rounded-2xl object-contain" />
         ) : (
           <div className="text-zinc-100 text-lg font-semibold leading-snug">{stem.content}</div>
@@ -60,9 +92,7 @@ function NormalCard({ q, onResolved }) {
               {o.kind === 'image' ? (
                 <>
                   {o.content && <img src={o.content} alt="" className="absolute inset-0 w-full h-full object-cover" />}
-                  {o.label && (
-                    <span className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-zinc-950/90 to-transparent px-2 py-1 text-xs text-white truncate">{o.label}</span>
-                  )}
+                  {o.label && <span className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-zinc-950/90 to-transparent px-2 py-1 text-xs text-white truncate">{o.label}</span>}
                 </>
               ) : (
                 <span className="font-medium">{o.content}</span>
@@ -75,46 +105,68 @@ function NormalCard({ q, onResolved }) {
   );
 }
 
-// Build the play plan: 'sound' only, or alternating 'sound'/'normal' for mixed.
-function buildPlan(mode, size, normalCount) {
-  if (mode !== 'mixed' || normalCount === 0) {
-    return Array.from({ length: size }, () => 'sound');
-  }
-  const plan = [];
-  let normalLeft = normalCount;
-  for (let i = 0; i < size; i += 1) {
-    // Alternate, but fall back to sound once normal questions run out.
-    if (i % 2 === 1 && normalLeft > 0) { plan.push('normal'); normalLeft -= 1; }
-    else plan.push('sound');
-  }
-  return plan;
-}
-
 export default function SoundPlay({ roundId }) {
   const round = useRef(loadRound(roundId)).current;
   const mode = round?.mode || 'sound';
   const difficulty = round?.difficulty || 'medium';
   const soundOn = round?.sound_enabled !== false;
-
-  // Single-select normal questions available for mixed interleaving.
   const normalQs = useRef(
     (round?.questions || []).filter((q) => !q.multi_select && q.mode !== 'connect'),
   ).current;
-  const size = round ? (round.size || 10) : 10;
-  const plan = useRef(buildPlan(mode, size, normalQs.length)).current;
+  const targetSize = round ? (round.size || 10) : 10;
+
+  const [plan, setPlan] = useState(null);
+  const [building, setBuilding] = useState(true);
+  const [buildError, setBuildError] = useState('');
+  const seriesPoolRef = useRef([]);
+  const seriesIdxRef = useRef(0);
+  const normalIdxRef = useRef(0);
 
   const [step, setStep] = useState(0);
-  const [current, setCurrent] = useState(null); // {type, payload}
+  const [current, setCurrent] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [correct, setCorrect] = useState(0);
-  const normalIdxRef = useRef(0);
 
   useEffect(() => { preloadSounds(); setSoundEnabled(soundOn); initAudio(); }, [soundOn]);
 
+  // Build the plan + load content sources once.
+  useEffect(() => {
+    if (!round) { setBuilding(false); return undefined; }
+    let alive = true;
+    (async () => {
+      try {
+        if (mode === 'sound') {
+          if (alive) setPlan(Array.from({ length: targetSize }, () => 'sound'));
+        } else if (mode === 'series') {
+          const el = await getSeriesEligible();
+          seriesPoolRef.current = shuffle(el.shows || []);
+          const n = Math.min(targetSize, seriesPoolRef.current.length);
+          if (alive) setPlan(Array.from({ length: n }, () => 'series'));
+        } else {
+          const [themes, series] = await Promise.all([
+            getThemeEligible().catch(() => ({ count: 0 })),
+            getSeriesEligible().catch(() => ({ count: 0, shows: [] })),
+          ]);
+          seriesPoolRef.current = shuffle(series.shows || []);
+          const includeSound = (themes.count || 0) >= MIN_POOL;
+          const includeSeries = (series.count || 0) >= MIN_POOL;
+          if (alive) {
+            setPlan(buildMixedPlan(targetSize, normalQs.length, includeSound, includeSeries, seriesPoolRef.current.length));
+          }
+        }
+      } catch (e) {
+        if (alive) setBuildError(e.message || 'Runde konnte nicht aufgebaut werden');
+      } finally {
+        if (alive) setBuilding(false);
+      }
+    })();
+    return () => { alive = false; };
+  }, [round, mode, targetSize, normalQs.length]);
+
   // Load the question for the current step.
   useEffect(() => {
-    if (!round || step >= plan.length) return;
+    if (!plan || step >= plan.length) return undefined;
     let alive = true;
     setLoading(true);
     setError('');
@@ -125,6 +177,10 @@ export default function SoundPlay({ roundId }) {
           const q = normalQs[normalIdxRef.current % normalQs.length];
           normalIdxRef.current += 1;
           if (alive) setCurrent({ type, payload: q });
+        } else if (type === 'series') {
+          const show = seriesPoolRef.current[seriesIdxRef.current % seriesPoolRef.current.length];
+          seriesIdxRef.current += 1;
+          if (alive) setCurrent({ type, payload: show });
         } else {
           const q = await getThemeQuestion(difficulty);
           if (alive) setCurrent({ type, payload: q });
@@ -136,7 +192,7 @@ export default function SoundPlay({ roundId }) {
       }
     })();
     return () => { alive = false; };
-  }, [step, round, plan, normalQs, difficulty]);
+  }, [step, plan, normalQs, difficulty]);
 
   const onResolved = useCallback((wasCorrect) => {
     if (wasCorrect) setCorrect((c) => c + 1);
@@ -154,7 +210,19 @@ export default function SoundPlay({ roundId }) {
     );
   }
 
-  // End screen
+  if (building || !plan) {
+    return (
+      <div className="h-[100dvh] bg-zinc-950 text-zinc-100 flex items-center justify-center">
+        {buildError ? (
+          <div className="text-center px-6">
+            <p className="text-rose-300 mb-3">{buildError}</p>
+            <button type="button" onClick={() => navigate('/quiz')} className="px-4 py-2 rounded-xl bg-zinc-800 text-zinc-200">Zurück</button>
+          </div>
+        ) : <Loader2 className="w-6 h-6 animate-spin text-zinc-500" />}
+      </div>
+    );
+  }
+
   if (step >= plan.length) {
     const total = plan.length;
     return (
@@ -174,7 +242,6 @@ export default function SoundPlay({ roundId }) {
 
   return (
     <div className="h-[100dvh] flex flex-col overflow-hidden bg-zinc-950 text-zinc-100">
-      {/* HUD */}
       <div className="shrink-0 flex items-center gap-3 px-4 pt-[max(0.6rem,env(safe-area-inset-top))] pb-2">
         <div className="flex items-center gap-2">
           <Music4 className="w-5 h-5 text-amber-400" />
@@ -188,7 +255,6 @@ export default function SoundPlay({ roundId }) {
         </button>
       </div>
 
-      {/* Body */}
       <div className="flex-1 min-h-0 px-4 pb-[max(0.75rem,env(safe-area-inset-bottom))]">
         {loading || !current ? (
           <div className="h-full flex items-center justify-center text-zinc-500">
@@ -197,12 +263,12 @@ export default function SoundPlay({ roundId }) {
                 <p className="text-rose-300 mb-3">{error}</p>
                 <button type="button" onClick={() => navigate('/quiz')} className="px-4 py-2 rounded-xl bg-zinc-800 text-zinc-200">Zurück</button>
               </div>
-            ) : (
-              <Loader2 className="w-6 h-6 animate-spin" />
-            )}
+            ) : <Loader2 className="w-6 h-6 animate-spin" />}
           </div>
         ) : current.type === 'sound' ? (
           <SoundQuestion key={current.payload.question_id} question={current.payload} soundOn={soundOn} onResolved={onResolved} />
+        ) : current.type === 'series' ? (
+          <SeriesQuestion key={current.payload.ratingKey} show={current.payload} soundOn={soundOn} onResolved={onResolved} />
         ) : (
           <NormalCard key={current.payload.id} q={current.payload} onResolved={onResolved} />
         )}

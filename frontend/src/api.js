@@ -189,3 +189,20 @@ export function scoreThemeGuess(questionId, guess) {
 export function answerThemeGuess(questionId, guess) {
   return postJson('/api/themes/answer', { question_id: questionId, guess });
 }
+
+// ---- TV-series themes ----
+export function getSeriesEligible() {
+  return fetch('/api/series/eligible').then(unwrap);
+}
+export function getSeriesCoverage() {
+  return fetch('/api/series/coverage').then(unwrap);
+}
+export function scoreSeriesGuess(ratingKey, guess) {
+  return postJson('/api/series/score', { ratingKey, guess });
+}
+export function answerSeriesGuess(ratingKey, guess) {
+  return postJson('/api/series/answer', { ratingKey, guess });
+}
+export function rescanSeries() {
+  return postJson('/api/series/rescan', {});
+}
