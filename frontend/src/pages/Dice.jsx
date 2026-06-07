@@ -1,13 +1,13 @@
 import { useState, useMemo, useEffect, useRef } from 'react';
 import {
   Dices, SlidersHorizontal, ChevronDown, ChevronUp, Clock, Calendar, Star,
-  ShieldAlert, Tag, X, AlertCircle, History as HistoryIcon, Youtube,
-  ExternalLink, Tv2, Sparkles, Play, Loader2, Eye, EyeOff, Check, Shield, RefreshCw, BarChart3,
+  AlertCircle, History as HistoryIcon, Youtube,
+  ExternalLink, Tv2, Sparkles, Play, Loader2, RefreshCw, BarChart3,
 } from 'lucide-react';
 import { getLibrary, movieInfo, getSettings, saveSettings } from '../api';
-import { HistogramRange } from '../components/HistogramRange';
 import FilterFunnel from '../components/FilterFunnel';
-import GenrePicker from '../components/GenrePicker';
+import MovieFilterPanel from '../components/MovieFilterPanel';
+import { buildFilterStages, formatRuntime, RUNTIME_MIN_BOUND, RUNTIME_MAX_BOUND } from '../components/movieFilters';
 import AppHeader from '../components/AppHeader';
 import DieIcon from '../components/DieIcon';
 import Fireworks from '../components/Fireworks';
@@ -15,10 +15,7 @@ import { usePrefs } from '../usePrefs';
 import { plexAppUrl } from '../lib/plexLink';
 
 const ACCENT = '#f5a623';
-const RUNTIME_MIN_BOUND = 60;
-const RUNTIME_MAX_BOUND = 240;
 const PREFS_KEY = 'plexdice:prefs:v1';
-const FSK_VALUES = [0, 6, 12, 16, 18];
 const LOADING_VERBS = ['ausgegraben', 'zusammengetragen', 'hochgeholt'];
 const FACT_SHOW = 4;
 
@@ -29,24 +26,6 @@ function fskColor(f) {
   if (f === 16) return 'bg-orange-500/15 text-orange-300 border-orange-500/30';
   if (f === 18) return 'bg-rose-500/15 text-rose-300 border-rose-500/30';
   return 'bg-zinc-500/15 text-zinc-300 border-zinc-500/30';
-}
-
-function formatRuntime(m) {
-  if (!m) return '?';
-  const h = Math.floor(m / 60);
-  const min = m % 60;
-  if (h === 0) return `${min}m`;
-  return `${h}h ${min.toString().padStart(2, '0')}m`;
-}
-
-// Genre groups: inner array = AND, outer = OR. Joins genres with " & ",
-// groups with " ODER "; parens around multi-genre groups only when >1 group.
-function genreSummary(groups) {
-  const active = groups.filter((g) => g.length > 0);
-  const multi = active.length > 1;
-  return active
-    .map((g) => (multi && g.length > 1 ? `(${g.join(' & ')})` : g.join(' & ')))
-    .join(' ODER ');
 }
 
 function loadPrefs() {
@@ -109,7 +88,6 @@ export default function Dice({ onNeedSettings }) {
     () => [...new Set(movies.flatMap((m) => m.g || []))].sort(),
     [movies],
   );
-  const selectedFlat = genreGroups.flat();
 
   // Load saved preferences (once), then fetch the library.
   useEffect(() => {
@@ -227,50 +205,13 @@ export default function Dice({ onNeedSettings }) {
   // One pipeline of ACTIVE filters, shared by the funnel (per-stage counts) and the
   // final list — so the funnel's last count always equals filtered.length, and an
   // empty pipeline means the full, unfiltered library.
-  const activeStages = useMemo(() => {
-    const fmtRating = (v) => v.toFixed(1).replace('.', ',');
-    const runtimeSummary =
-      runtimeMin === RUNTIME_MIN_BOUND ? `≤ ${formatRuntime(runtimeMax)}`
-        : runtimeMax === RUNTIME_MAX_BOUND ? `≥ ${formatRuntime(runtimeMin)}`
-          : `${formatRuntime(runtimeMin)}–${formatRuntime(runtimeMax)}`;
-    const ratingSummary =
-      ratingMax >= 10 ? `Ab ${fmtRating(ratingMin)}`
-        : ratingMin <= 0 ? `Bis ${fmtRating(ratingMax)}`
-          : `${fmtRating(ratingMin)}–${fmtRating(ratingMax)}`;
-    const genreActive = genreGroups.filter((grp) => grp.length > 0);
-    return [
-      genreActive.length > 0 && {
-        id: 'genre', label: 'Genres', icon: Tag, drawer_target: 'genre',
-        summary: genreSummary(genreGroups),
-        pred: (m) => genreActive.some((grp) => grp.every((g) => (m.g || []).includes(g))),
-      },
-      (effYearMin !== yearBounds.min || effYearMax !== yearBounds.max) && {
-        id: 'year', label: 'Jahr', icon: Calendar, drawer_target: 'year',
-        summary: `${effYearMin}–${effYearMax}`,
-        pred: (m) => !m.y || (m.y >= effYearMin && m.y <= effYearMax),
-      },
-      (runtimeMin !== RUNTIME_MIN_BOUND || runtimeMax !== RUNTIME_MAX_BOUND) && {
-        id: 'runtime', label: 'Spielzeit', icon: Clock, drawer_target: 'runtime',
-        summary: runtimeSummary,
-        pred: (m) => !m.r || (m.r >= runtimeMin && m.r <= runtimeMax),
-      },
-      (fskMin > 0 || fskMax < 18) && {
-        id: 'fsk', label: 'FSK', icon: Shield, drawer_target: 'fsk',
-        summary: fskMin > 0 ? `FSK ${fskMin}–${fskMax}` : `FSK ≤ ${fskMax}`,
-        pred: (m) => m.f == null || (m.f >= fskMin && m.f <= fskMax),
-      },
-      (ratingMin > 0 || ratingMax < 10) && {
-        id: 'rating', label: 'Bewertung', icon: Star, drawer_target: 'rating',
-        summary: ratingSummary,
-        pred: (m) => m.s == null || (m.s >= ratingMin && m.s <= ratingMax),
-      },
-      watched !== 'all' && {
-        id: 'watched', label: 'Gesehen', icon: Eye, drawer_target: 'watched',
-        summary: watched === 'unseen' ? 'Ungesehen' : 'Gesehen',
-        pred: (m) => (watched === 'unseen' ? (m.view_count || 0) === 0 : (m.view_count || 0) > 0),
-      },
-    ].filter(Boolean);
-  }, [genreGroups, effYearMin, effYearMax, yearBounds.min, yearBounds.max, runtimeMin, runtimeMax, fskMin, fskMax, ratingMin, ratingMax, watched]);
+  const activeStages = useMemo(
+    () => buildFilterStages(
+      { genreGroups, yearMin, yearMax, runtimeMin, runtimeMax, fskMin, fskMax, ratingMin, ratingMax, watched },
+      yearBounds,
+    ),
+    [genreGroups, yearMin, yearMax, runtimeMin, runtimeMax, fskMin, fskMax, ratingMin, ratingMax, watched, yearBounds],
+  );
 
   const filtered = useMemo(() => {
     let pool = movies;
@@ -378,8 +319,6 @@ export default function Dice({ onNeedSettings }) {
     else if (id === 'rating') { setRatingMin(0); setRatingMax(10); }
     else if (id === 'watched') setWatched('all');
   };
-
-  const sectionClass = (id) => (highlightSection === id ? 'filter-pulse' : undefined);
 
   const selectPicked = (m) => {
     setPicked(m);
@@ -559,134 +498,21 @@ export default function Dice({ onNeedSettings }) {
               the last control clear of the home indicator; overscroll-contain stops the scroll from
               chaining to the page. No position:fixed (which jumps on iOS). */}
           {showFilters && (
-            <div className="mb-4 p-4 pb-[calc(1rem+env(safe-area-inset-bottom))] rounded-2xl bg-zinc-900/60 border border-zinc-800 space-y-5 max-h-[70dvh] overflow-y-auto overscroll-contain">
-              <div id="filter-genre" className={sectionClass('genre')}>
-                <div className="flex items-center justify-between mb-2">
-                  <label className="text-sm font-medium text-zinc-300 flex items-center gap-2 uppercase tracking-wide">
-                    <Tag className="w-3.5 h-3.5" /> Genres
-                  </label>
-                  {selectedFlat.length > 0 && (
-                    <button onClick={() => setGenreGroups([])} className="text-xs text-amber-400/80 active:text-amber-300 font-medium">leeren</button>
-                  )}
-                </div>
-                <GenrePicker groups={genreGroups} allGenres={allGenres} onChange={setGenreGroups} />
-                {selectedFlat.length > 0 && (
-                  <p className="text-xs text-amber-400/90 mt-2 tabular-nums">{genreSummary(genreGroups)}</p>
-                )}
-              </div>
-
-              <div id="filter-watched" className={sectionClass('watched')}>
-                <label className="text-sm font-medium text-zinc-200 flex items-center gap-2 mb-2 uppercase tracking-wide">
-                  <Eye className="w-3.5 h-3.5" /> Gesehen
-                </label>
-                <div className="grid grid-cols-3 gap-2">
-                  {[
-                    { v: 'all', label: 'Alle', Icon: Eye },
-                    { v: 'unseen', label: 'Ungesehen', Icon: EyeOff },
-                    { v: 'seen', label: 'Gesehen', Icon: Check },
-                  ].map(({ v, label, Icon }) => {
-                    const on = watched === v;
-                    return (
-                      <button
-                        key={v}
-                        onClick={() => setWatched(v)}
-                        className={`min-h-[44px] px-2 py-2.5 rounded-xl text-sm font-medium flex items-center justify-center gap-1.5 active:scale-[0.97] transition-colors ${on ? 'bg-amber-400 text-zinc-950' : 'bg-zinc-800 text-zinc-300'}`}
-                      >
-                        <Icon className="w-4 h-4 shrink-0" /> <span className="truncate">{label}</span>
-                      </button>
-                    );
-                  })}
-                </div>
-              </div>
-
-              <div id="filter-year" className={sectionClass('year')}>
-                <label className="text-sm font-medium text-zinc-200 flex items-center gap-2 mb-2 uppercase tracking-wide">
-                  <Calendar className="w-3.5 h-3.5" /> Jahr: <span className="text-amber-400 font-mono normal-case">{effYearMin}</span> – <span className="text-amber-400 font-mono normal-case">{effYearMax}</span>
-                </label>
-                <HistogramRange
-                  data={movies.map((m) => m.y).filter(Boolean)}
-                  min={yearBounds.min} max={yearBounds.max}
-                  valueMin={effYearMin} valueMax={effYearMax}
-                  onChangeMin={setYearMin} onChangeMax={setYearMax}
-                  bucketCount={31} step={1}
-                />
-              </div>
-
-              <div id="filter-runtime" className={sectionClass('runtime')}>
-                <label className="text-sm font-medium text-zinc-200 flex items-center gap-2 mb-2 uppercase tracking-wide">
-                  <Clock className="w-3.5 h-3.5" /> Spielzeit: <span className="text-amber-400 font-mono normal-case">{formatRuntime(runtimeMin)}</span> – <span className="text-amber-400 font-mono normal-case">{formatRuntime(runtimeMax)}</span>
-                </label>
-                <HistogramRange
-                  data={movies.map((m) => m.r).filter(Boolean)}
-                  min={RUNTIME_MIN_BOUND} max={RUNTIME_MAX_BOUND}
-                  valueMin={runtimeMin} valueMax={runtimeMax}
-                  onChangeMin={setRuntimeMin} onChangeMax={setRuntimeMax}
-                  bucketCount={24} step={5} formatValue={formatRuntime}
-                />
-              </div>
-
-              <div id="filter-fsk" className={sectionClass('fsk')}>
-                <label className="text-sm font-medium text-zinc-200 flex items-center gap-2 mb-2 uppercase tracking-wide">
-                  <ShieldAlert className="w-3.5 h-3.5" /> FSK: <span className="text-amber-400 font-mono">{fskMin}</span> – <span className="text-amber-400 font-mono">{fskMax}</span>
-                </label>
-                {(() => {
-                  const counts = FSK_VALUES.map((f) => movies.filter((m) => m.f === f).length);
-                  const maxC = Math.max(1, ...counts);
-                  const minIdx = FSK_VALUES.indexOf(fskMin);
-                  const maxIdx = FSK_VALUES.indexOf(fskMax);
-                  return (
-                    <div>
-                      <div className="flex items-end gap-1.5 h-14 mb-2 px-[10px]">
-                        {FSK_VALUES.map((f, i) => {
-                          const active = f >= fskMin && f <= fskMax;
-                          const h = (counts[i] / maxC) * 100;
-                          return (
-                            <div key={f} className="flex-1 flex flex-col justify-end" style={{ height: '100%' }}>
-                              <div className="w-full rounded-t-md transition-colors" style={{ height: `${Math.max(8, h)}%`, background: active ? ACCENT : 'rgba(82,82,91,0.5)' }} />
-                            </div>
-                          );
-                        })}
-                      </div>
-                      <div className="dual-range relative h-9 px-[10px] mb-2">
-                        <div className="absolute top-1/2 left-[10px] right-[10px] h-1 -translate-y-1/2 rounded-full bg-zinc-700/60" />
-                        <div className="absolute top-1/2 h-1 -translate-y-1/2 rounded-full bg-amber-400" style={{ left: `calc(10px + ${(minIdx / (FSK_VALUES.length - 1)) * 100}%)`, right: `calc(10px + ${100 - (maxIdx / (FSK_VALUES.length - 1)) * 100}%)` }} />
-                        <input type="range" min={0} max={FSK_VALUES.length - 1} step={1} value={minIdx}
-                          onChange={(e) => { const v = parseInt(e.target.value, 10); setFskMin(FSK_VALUES[Math.min(v, maxIdx)]); }}
-                          className="dual-range-input" style={{ zIndex: 2 }} />
-                        <input type="range" min={0} max={FSK_VALUES.length - 1} step={1} value={maxIdx}
-                          onChange={(e) => { const v = parseInt(e.target.value, 10); setFskMax(FSK_VALUES[Math.max(v, minIdx)]); }}
-                          className="dual-range-input" style={{ zIndex: 3 }} />
-                      </div>
-                      <div className="flex gap-1.5 px-1">
-                        {FSK_VALUES.map((f, i) => (
-                          <div key={f} className="flex-1 text-center">
-                            <div className={`text-xs font-bold ${f >= fskMin && f <= fskMax ? 'text-amber-400' : 'text-zinc-500'}`}>{f}</div>
-                            <div className="text-[9px] text-zinc-500">{counts[i]}</div>
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-                  );
-                })()}
-              </div>
-
-              <div id="filter-rating" className={sectionClass('rating')}>
-                <label className="text-sm font-medium text-zinc-200 flex items-center gap-2 mb-2 uppercase tracking-wide">
-                  <Star className="w-3.5 h-3.5" /> Bewertung: <span className="text-amber-400 font-mono">{ratingMin.toFixed(1)}</span> – <span className="text-amber-400 font-mono">{ratingMax.toFixed(1)}</span>
-                </label>
-                <HistogramRange
-                  data={movies.map((m) => m.s).filter((s) => s != null)}
-                  min={0} max={10}
-                  valueMin={ratingMin} valueMax={ratingMax}
-                  onChangeMin={setRatingMin} onChangeMax={setRatingMax}
-                  bucketCount={20} step={0.1} formatValue={(v) => v.toFixed(1)}
-                />
-              </div>
-
-              <button onClick={resetFilters}
-                className="w-full py-2 rounded-xl bg-zinc-800/60 text-zinc-300 text-sm font-medium border border-zinc-800 active:scale-[0.98] transition-transform flex items-center justify-center gap-2">
-                <X className="w-3.5 h-3.5" /> Filter zurücksetzen
-              </button>
+            <div className="mb-4 p-4 pb-[calc(1rem+env(safe-area-inset-bottom))] rounded-2xl bg-zinc-900/60 border border-zinc-800 max-h-[70dvh] overflow-y-auto overscroll-contain">
+              <MovieFilterPanel
+                movies={movies}
+                genreGroups={genreGroups} setGenreGroups={setGenreGroups} allGenres={allGenres}
+                watched={watched} setWatched={setWatched}
+                yearBounds={yearBounds} effYearMin={effYearMin} effYearMax={effYearMax}
+                setYearMin={setYearMin} setYearMax={setYearMax}
+                runtimeMin={runtimeMin} runtimeMax={runtimeMax}
+                setRuntimeMin={setRuntimeMin} setRuntimeMax={setRuntimeMax}
+                RUNTIME_MIN_BOUND={RUNTIME_MIN_BOUND} RUNTIME_MAX_BOUND={RUNTIME_MAX_BOUND}
+                fskMin={fskMin} fskMax={fskMax} setFskMin={setFskMin} setFskMax={setFskMax}
+                ratingMin={ratingMin} ratingMax={ratingMax} setRatingMin={setRatingMin} setRatingMax={setRatingMax}
+                onReset={resetFilters}
+                highlightSection={highlightSection}
+              />
             </div>
           )}
 
