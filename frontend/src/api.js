@@ -124,6 +124,9 @@ export function quizComplete(roundId, body) {
 export function quizState(roundId) {
   return fetch(`/api/quiz/round/${roundId}/state`).then(unwrap);
 }
+export function quizSolutions(roundId) {
+  return fetch(`/api/quiz/${roundId}/solutions`).then(unwrap);
+}
 export function quizAbandon(roundId) {
   return del(`/api/quiz/round/${roundId}`);
 }
