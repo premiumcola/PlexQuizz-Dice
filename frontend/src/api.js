@@ -221,3 +221,6 @@ export function rescanSeries() {
 export function seriesHint(ratingKey, level) {
   return postJson('/api/series/hint', { ratingKey, level });
 }
+export function getSeriesSample() {
+  return fetch('/api/series/sample').then(unwrap);
+}

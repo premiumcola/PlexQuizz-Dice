@@ -1,13 +1,16 @@
-import { useEffect, useState, useCallback } from 'react';
-import { Tv, Loader2, ChevronDown, RefreshCw } from 'lucide-react';
-import { getSeriesCoverage, rescanSeries } from '../api';
+import { useEffect, useState, useCallback, useRef } from 'react';
+import { Tv, Loader2, ChevronDown, RefreshCw, Play } from 'lucide-react';
+import { getSeriesCoverage, rescanSeries, getSeriesSample } from '../api';
 
 // T2.9 — "Serien-Themes" coverage section for the Settings status area. Shows how many shows
-// have a Plex theme, an expandable list of those WITHOUT one, and a rescan trigger.
+// have a Plex theme, an expandable list of those WITHOUT one, a rescan trigger, and a sample.
 export default function SeriesCoveragePanel() {
   const [cov, setCov] = useState(null);
   const [loading, setLoading] = useState(true);
   const [rescanning, setRescanning] = useState(false);
+  const [sample, setSample] = useState(null);
+  const [sampleErr, setSampleErr] = useState('');
+  const audioRef = useRef(null);
 
   const load = useCallback(async () => {
     try {
@@ -33,6 +36,23 @@ export default function SeriesCoveragePanel() {
     }
   };
 
+  const playSample = async () => {
+    setSampleErr('');
+    try {
+      const s = await getSeriesSample();
+      setSample(s);
+      if (audioRef.current && s.ratingKey != null) {
+        audioRef.current.src = `/api/series/theme/${s.ratingKey}`;
+        audioRef.current.play().catch(() => {});
+      }
+    } catch (e) {
+      setSample(null);
+      setSampleErr(e.status === 404 ? 'Noch keine Hörprobe vorhanden.' : (e.message || 'Fehler'));
+    }
+  };
+
+  useEffect(() => () => { if (audioRef.current) audioRef.current.pause(); }, []);
+
   const total = cov?.total || 0;
   const withTheme = cov?.with_theme || 0;
   const percent = cov?.percent ?? (total ? Math.round((withTheme / total) * 1000) / 10 : 0);
@@ -54,6 +74,17 @@ export default function SeriesCoveragePanel() {
           <div className="h-2 rounded-full bg-zinc-800 overflow-hidden">
             <div className="h-full bg-amber-400 rounded-full transition-[width] duration-500" style={{ width: `${total ? (withTheme / total) * 100 : 0}%` }} />
           </div>
+
+          <audio ref={audioRef} className="hidden" />
+          <button
+            type="button"
+            onClick={playSample}
+            className="w-full min-h-[44px] mt-3 px-4 rounded-xl bg-zinc-800 text-amber-300 font-medium flex items-center justify-center gap-2 active:scale-[0.98] transition-transform"
+          >
+            <Play className="w-4 h-4 fill-amber-300" /> Hörprobe testen
+          </button>
+          {sample && <div className="mt-2 text-xs text-zinc-400 text-center truncate">♪ {sample.title}{sample.year ? ` (${sample.year})` : ''}</div>}
+          {sampleErr && <div className="mt-2 text-xs text-zinc-500 text-center">{sampleErr}</div>}
 
           <details className="mt-3 group">
             <summary className="list-none cursor-pointer min-h-[44px] flex items-center justify-between gap-2 px-3 rounded-xl bg-zinc-800 text-zinc-200 text-sm active:scale-[0.99] transition-transform">
