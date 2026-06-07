@@ -11,13 +11,23 @@ from __future__ import annotations
 
 import json
 import logging
+import os
 from pathlib import Path
-from typing import Dict, Optional
+from typing import Dict, List, Optional
 
 logger = logging.getLogger(__name__)
 
-# Resolved relative to this module so it works regardless of the process CWD.
-_SEED_PATH = Path(__file__).parent / "data" / "theme_seed.json"
+# Resolve the seed from the FIRST candidate that exists, trying both filenames at each
+# location: the private /data mount first (same dir as theme_cache.json — keeps the user's
+# film list out of git AND out of the image), then module-relative as a fallback.
+DATA_DIR = os.environ.get("DATA_DIR", "/data")
+_MODULE_DATA = Path(__file__).parent / "data"
+_SEED_CANDIDATES: List[Path] = [
+    Path(DATA_DIR) / "theme_seed.json",
+    Path(DATA_DIR) / "movie_theme_seed.json",
+    _MODULE_DATA / "theme_seed.json",
+    _MODULE_DATA / "movie_theme_seed.json",
+]
 _USABLE_CONFIDENCE = {"high", "medium", "low"}
 
 # Cached once after the first load() (also primed at import time, see bottom).
@@ -39,27 +49,32 @@ def _log_breakdown(seed: Dict[str, dict]) -> None:
 
 
 def load_seed() -> Dict[str, dict]:
-    """Load the theme seed once and cache it module-level.
+    """Load the theme seed from the first existing candidate path; cache it module-level.
 
-    Returns an empty dict (never raises) when the file is missing or malformed, so a
+    Returns an empty dict (never raises) when no candidate exists or all are malformed, so a
     missing seed simply degrades to the Haiku-only path.
     """
     global _seed
     if _seed is not None:
         return _seed
-    try:
-        with _SEED_PATH.open("r", encoding="utf-8") as fh:
-            data = json.load(fh)
-    except FileNotFoundError:
-        logger.error("theme_seed: file not found at %s; running Haiku-only", _SEED_PATH)
-        _seed = {}
+    for path in _SEED_CANDIDATES:
+        if not path.exists():
+            continue
+        try:
+            with path.open("r", encoding="utf-8") as fh:
+                data = json.load(fh)
+        except (OSError, json.JSONDecodeError) as exc:
+            logger.error("theme_seed: could not read %s: %s", path, exc)
+            continue
+        _seed = data if isinstance(data, dict) else {}
+        logger.info("theme_seed source: %s", path)
+        _log_breakdown(_seed)
         return _seed
-    except json.JSONDecodeError as exc:
-        logger.error("theme_seed: could not parse %s: %s; running Haiku-only", _SEED_PATH, exc)
-        _seed = {}
-        return _seed
-    _seed = data if isinstance(data, dict) else {}
-    _log_breakdown(_seed)
+    logger.error(
+        "theme_seed: no seed file found (tried %s); running Haiku-only",
+        ", ".join(str(p) for p in _SEED_CANDIDATES),
+    )
+    _seed = {}
     return _seed
 
 
