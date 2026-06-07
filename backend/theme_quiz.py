@@ -145,6 +145,19 @@ def primary_target(question_id: str) -> Optional[str]:
     return question["targets"][0]
 
 
+def reveal(question_id: str) -> Optional[Dict[str, Any]]:
+    """The stored reveal (title + cover + links) for a question, regardless of correctness.
+
+    For the END-OF-ROUND Auflösung only: the client collects each missed question's correct
+    title+cover here so the post-round overview can list every answer. The mid-play HARD RULE
+    still holds — the question UI never shows this for a wrong guess; only the post-round
+    Auflösung does (mirrors the normal mode, whose answers are likewise known client-side).
+    None if the question is unknown/expired.
+    """
+    question = _get(question_id)
+    return question.get("reveal") if question is not None else None
+
+
 def eligible_count() -> int:
     """Number of movies eligible for the theme quiz (have a streamable preview)."""
     return len(theme_enrichment.list_eligible())

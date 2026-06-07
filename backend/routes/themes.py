@@ -87,6 +87,19 @@ def answer():
     return jsonify(result)
 
 
+@bp.post("/reveal")
+def reveal():
+    """POST /api/themes/reveal — the correct title+cover for a question (END-OF-ROUND Auflösung).
+
+    The client calls this only when assembling the post-round overview for a MISSED question;
+    the in-play question UI never shows it (the mid-play HARD RULE). 404 if expired."""
+    body = request.get_json(silent=True) or {}
+    payload = theme_quiz.reveal(str(body.get("question_id") or ""))
+    if payload is None:
+        return jsonify({"error": "Frage abgelaufen"}), 404
+    return jsonify({"reveal": payload})
+
+
 @bp.post("/hint")
 def hint():
     """POST /api/themes/hint — progressive letter hint for the question's primary title.

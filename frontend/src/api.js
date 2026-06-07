@@ -198,6 +198,10 @@ export function scoreThemeGuess(questionId, guess) {
 export function answerThemeGuess(questionId, guess) {
   return postJson('/api/themes/answer', { question_id: questionId, guess });
 }
+// END-OF-ROUND only: the correct title+cover for a (missed) sound question, for the Auflösung.
+export function getThemeReveal(questionId) {
+  return postJson('/api/themes/reveal', { question_id: questionId });
+}
 export function themeHint(questionId, level) {
   return postJson('/api/themes/hint', { question_id: questionId, level });
 }
