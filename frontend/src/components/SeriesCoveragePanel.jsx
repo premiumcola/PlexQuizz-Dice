@@ -1,5 +1,5 @@
 import { useEffect, useState, useCallback, useRef } from 'react';
-import { Tv, Loader2, ChevronDown, RefreshCw, Play } from 'lucide-react';
+import { Tv, Loader2, ChevronDown, RefreshCw, Play, Square } from 'lucide-react';
 import { getSeriesCoverage, rescanSeries, getSeriesSample } from '../api';
 
 // T2.9 — "Serien-Themes" coverage section for the Settings status area. Shows how many shows
@@ -10,6 +10,7 @@ export default function SeriesCoveragePanel() {
   const [rescanning, setRescanning] = useState(false);
   const [sample, setSample] = useState(null);
   const [sampleErr, setSampleErr] = useState('');
+  const [playing, setPlaying] = useState(false); // is the Hörprobe currently playing?
   const audioRef = useRef(null);
 
   const load = useCallback(async () => {
@@ -43,12 +44,19 @@ export default function SeriesCoveragePanel() {
       setSample(s);
       if (audioRef.current && s.ratingKey != null) {
         audioRef.current.src = `/api/series/theme/${s.ratingKey}`;
-        audioRef.current.play().catch(() => {});
+        audioRef.current.play().then(() => setPlaying(true)).catch(() => setPlaying(false));
       }
     } catch (e) {
       setSample(null);
       setSampleErr(e.status === 404 ? 'Noch keine Hörprobe vorhanden.' : (e.message || 'Fehler'));
     }
+  };
+
+  // Stop the Hörprobe: pause + rewind so the next play starts fresh.
+  const stopSample = () => {
+    const a = audioRef.current;
+    if (a) { a.pause(); a.currentTime = 0; }
+    setPlaying(false);
   };
 
   useEffect(() => () => { if (audioRef.current) audioRef.current.pause(); }, []);
@@ -75,14 +83,26 @@ export default function SeriesCoveragePanel() {
             <div className="h-full bg-amber-400 rounded-full transition-[width] duration-500" style={{ width: `${total ? (withTheme / total) * 100 : 0}%` }} />
           </div>
 
-          <audio ref={audioRef} className="hidden" />
-          <button
-            type="button"
-            onClick={playSample}
-            className="w-full min-h-[44px] mt-3 px-4 rounded-xl bg-zinc-800 text-amber-300 font-medium flex items-center justify-center gap-2 active:scale-[0.98] transition-transform"
-          >
-            <Play className="w-4 h-4 fill-amber-300" /> Hörprobe testen
-          </button>
+          <audio ref={audioRef} className="hidden" onEnded={() => setPlaying(false)} />
+          {/* Hear a sample — play + Stop in one row */}
+          <div className="flex items-center gap-2 mt-3">
+            <button
+              type="button"
+              onClick={playSample}
+              className="flex-1 min-h-[44px] px-4 rounded-xl bg-zinc-800 text-amber-300 font-medium flex items-center justify-center gap-2 active:scale-[0.98] transition-transform"
+            >
+              <Play className="w-4 h-4 fill-amber-300" /> Hörprobe testen
+            </button>
+            <button
+              type="button"
+              onClick={stopSample}
+              disabled={!playing}
+              aria-label="Stopp"
+              className="w-12 min-h-[44px] shrink-0 rounded-xl bg-zinc-700 text-zinc-100 flex items-center justify-center active:scale-[0.98] transition-transform disabled:opacity-40 disabled:cursor-not-allowed"
+            >
+              <Square className="w-4 h-4 fill-current" />
+            </button>
+          </div>
           {sample && <div className="mt-2 text-xs text-zinc-400 text-center truncate">♪ {sample.title}{sample.year ? ` (${sample.year})` : ''}</div>}
           {sampleErr && <div className="mt-2 text-xs text-zinc-500 text-center">{sampleErr}</div>}
 
