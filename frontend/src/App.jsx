@@ -8,8 +8,8 @@ import { usePathname, navigate } from './router';
 import { homePath } from './home';
 
 const TABS = [
-  { id: 'dice', label: 'Würfeln', icon: Dices, path: '/' },
-  { id: 'quiz', label: 'Quiz', icon: Target, path: '/quiz/setup' },
+  { id: 'dice', label: 'PlexDice', icon: Dices, path: '/' },
+  { id: 'quiz', label: 'PlexQuiz', icon: Target, path: '/quiz/setup' },
   { id: 'settings', label: 'Einstellungen', icon: SettingsIcon, path: '/settings' },
 ];
 
