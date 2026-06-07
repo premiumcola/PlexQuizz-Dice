@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
-import { Dices, Target, Settings as SettingsIcon, AlertCircle } from 'lucide-react';
+import { Dices, Target, Settings as SettingsIcon, AlertCircle, ArrowLeft } from 'lucide-react';
 import Dice from './pages/Dice';
 import Settings from './pages/Settings';
 import QuizRouter from './pages/Quiz';
@@ -11,6 +11,15 @@ const TABS = [
   { id: 'dice', label: 'PlexDice', icon: Dices, path: '/' },
   { id: 'quiz', label: 'PlexQuiz', icon: Target, path: '/quiz/setup' },
   { id: 'settings', label: 'Einstellungen', icon: SettingsIcon, path: '/settings' },
+];
+
+// Settings sub-sections — driven from the top nav (Settings.jsx no longer renders its own row).
+const SETTINGS_TABS = [
+  { id: 'allgemein', label: 'Allgemein' },
+  { id: 'plex', label: 'Plex' },
+  { id: 'bibliotheken', label: 'Bibliotheken' },
+  { id: 'quiz', label: 'Quiz' },
+  { id: 'ueber', label: 'Über' },
 ];
 
 function activeTab(pathname) {
@@ -47,7 +56,12 @@ function NavItem({ active, onClick, icon: Icon, label, vertical }) {
 export default function App() {
   const pathname = usePathname();
   const [needSettings, setNeedSettings] = useState(false);
+  // Which settings sub-section is shown — lifted out of Settings.jsx so the top nav drives it.
+  const [settingsSection, setSettingsSection] = useState('plex');
   const tab = activeTab(pathname);
+  const inSettings = tab === 'settings';
+  // "Back" out of the settings bar → return to the main bar (the last content tab).
+  const leaveSettings = () => navigate(homePath());
   // Full-screen quiz play (normal + sound/series/mixed): hide the global nav so it never
   // overlaps the 100dvh play screen or clips its top-bar controls. The Auflösung/result pages
   // stay non-immersive (they scroll and keep the nav).
@@ -89,7 +103,7 @@ export default function App() {
   }, []);
 
   let page;
-  if (tab === 'settings') page = <Settings onConnected={() => setNeedSettings(false)} />;
+  if (tab === 'settings') page = <Settings onConnected={() => setNeedSettings(false)} section={settingsSection} setSection={setSettingsSection} />;
   else if (tab === 'quiz') page = <QuizRouter pathname={pathname} />;
   else page = <Dice onNeedSettings={handleNeedSettings} />;
 
@@ -129,7 +143,35 @@ export default function App() {
 
       {/* Immersive quiz play locks itself to one 100dvh viewport, so main must NOT scroll there
           (otherwise the app-height overshoot below the dvh cap would add a scrollable strip). */}
-      <main className={`flex-1 min-h-0 ${immersive ? 'overflow-hidden' : 'overflow-y-auto'} ${immersive || showBanner ? '' : 'safe-top'}`}>{page}</main>
+      <main className={`flex-1 min-h-0 ${immersive ? 'overflow-hidden' : 'overflow-y-auto'} ${immersive || showBanner ? '' : 'safe-top'}`}>
+        {/* Mobile: the settings sub-sections live in a top bar (the bottom bar keeps the main items).
+            Desktop shows them in the morphed top-right nav instead (lg:hidden here). */}
+        {inSettings && (
+          <div className="lg:hidden max-w-3xl mx-auto px-4 sm:px-6 pt-4">
+            <div className="flex items-center gap-1 overflow-x-auto p-1 rounded-2xl bg-zinc-900/60">
+              <button
+                type="button"
+                onClick={leaveSettings}
+                aria-label="Zurück"
+                className="shrink-0 min-w-[44px] min-h-[44px] flex items-center justify-center rounded-xl text-zinc-400 active:text-zinc-200 transition-colors"
+              >
+                <ArrowLeft className="w-5 h-5" />
+              </button>
+              {SETTINGS_TABS.map((t) => (
+                <button
+                  key={t.id}
+                  type="button"
+                  onClick={() => setSettingsSection(t.id)}
+                  className={`shrink-0 min-h-[44px] px-4 rounded-xl text-sm font-medium whitespace-nowrap transition-colors ${settingsSection === t.id ? 'bg-amber-400 text-zinc-950' : 'text-zinc-400 active:text-zinc-200'}`}
+                >
+                  {t.label}
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
+        {page}
+      </main>
 
       {!immersive && (
         <>
@@ -141,9 +183,32 @@ export default function App() {
             className="hidden lg:flex lg:flex-col fixed right-4 z-40 gap-1 p-1 rounded-2xl bg-zinc-900/90 backdrop-blur shadow-lg shadow-black/40"
             style={{ top: 'max(1rem, env(safe-area-inset-top))' }}
           >
-            {TABS.map((t) => (
-              <NavItem key={t.id} active={tab === t.id} onClick={() => navigate(t.path)} icon={t.icon} label={t.label} />
-            ))}
+            {inSettings ? (
+              <>
+                {/* The same bar, morphed: a back control + the settings sub-sections. */}
+                <button
+                  type="button"
+                  onClick={leaveSettings}
+                  className="flex items-center gap-2 px-4 py-2 min-h-[44px] rounded-xl text-sm font-medium text-zinc-400 active:text-zinc-200 transition-colors"
+                >
+                  <ArrowLeft className="w-4 h-4" /> Zurück
+                </button>
+                {SETTINGS_TABS.map((t) => (
+                  <button
+                    key={t.id}
+                    type="button"
+                    onClick={() => setSettingsSection(t.id)}
+                    className={`flex items-center gap-2 px-4 py-2 min-h-[44px] rounded-xl text-sm font-medium transition-colors ${settingsSection === t.id ? 'bg-amber-400 text-zinc-950' : 'text-zinc-400 active:text-zinc-200'}`}
+                  >
+                    {t.label}
+                  </button>
+                ))}
+              </>
+            ) : (
+              TABS.map((t) => (
+                <NavItem key={t.id} active={tab === t.id} onClick={() => navigate(t.path)} icon={t.icon} label={t.label} />
+              ))
+            )}
           </nav>
 
           {/* Mobile: bottom tab bar — the LAST flex child of #root (flex:0 0 auto via shrink-0;

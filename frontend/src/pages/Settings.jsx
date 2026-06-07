@@ -71,14 +71,6 @@ const ABOUT_SOURCES = [
   { text: 'Anthropic Claude API — KI-Plot-Anreicherung (optional)', href: 'https://www.anthropic.com' },
 ];
 
-const TABS = [
-  { id: 'allgemein', label: 'Allgemein' },
-  { id: 'plex', label: 'Plex' },
-  { id: 'bibliotheken', label: 'Bibliotheken' },
-  { id: 'quiz', label: 'Quiz' },
-  { id: 'ueber', label: 'Über' },
-];
-
 const DEFAULT_PORT = '32400';
 const POLL_INTERVAL = 2000;
 const LOGIN_TIMEOUT = 5 * 60 * 1000;
@@ -136,8 +128,7 @@ function Row({ label, hint, children }) {
   );
 }
 
-export default function Settings({ onConnected }) {
-  const [activeTab, setActiveTab] = useState('plex');
+export default function Settings({ onConnected, section = 'plex', setSection }) {
   const [loaded, setLoaded] = useState(false);
 
   const [clientId, setClientId] = useState('');
@@ -367,7 +358,7 @@ export default function Settings({ onConnected }) {
     try { popupRef.current?.close(); } catch { /* cross-origin */ }
     setUser(u);
     showToast('success', '✓ Mit Plex verbunden');
-    setActiveTab('bibliotheken');
+    setSection('bibliotheken');
     onConnected?.();
   }, [stopPolling, showToast, onConnected]);
 
@@ -490,8 +481,8 @@ export default function Settings({ onConnected }) {
 
   // Load movie sections when the Bibliotheken tab is shown and a host is known.
   useEffect(() => {
-    if (activeTab === 'bibliotheken' && user && hostname && sections.length === 0 && !testing) doTest();
-  }, [activeTab, hostname, user]); // eslint-disable-line react-hooks/exhaustive-deps
+    if (section === 'bibliotheken' && user && hostname && sections.length === 0 && !testing) doTest();
+  }, [section, hostname, user]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Clean up timers on unmount.
   useEffect(() => () => stopPolling(), [stopPolling]);
@@ -609,23 +600,11 @@ export default function Settings({ onConnected }) {
           <h1 className="font-display text-3xl lg:text-4xl tracking-tight">Einstellungen</h1>
         </div>
 
-        <div className="flex gap-1 overflow-x-auto mb-6 p-1 rounded-2xl bg-zinc-900/60 border border-zinc-800">
-          {TABS.map((t) => (
-            <button
-              key={t.id}
-              onClick={() => setActiveTab(t.id)}
-              className={`px-4 py-2 rounded-xl text-base font-medium whitespace-nowrap transition-colors ${activeTab === t.id ? 'bg-amber-400 text-zinc-950' : 'text-zinc-400 active:text-zinc-200'}`}
-            >
-              {t.label}
-            </button>
-          ))}
-        </div>
-
         {!loaded && (
           <div className="flex items-center gap-2 text-zinc-400 text-sm"><Loader2 className="w-4 h-4 animate-spin" /> Lädt…</div>
         )}
 
-        {loaded && activeTab === 'plex' && (
+        {loaded && section === 'plex' && (
           <section>
             <h2 className="text-lg font-semibold mb-1">Plex Einstellungen</h2>
             <p className="text-sm text-zinc-400 mb-4">Melde dich mit deinem Plex-Account an und wähle deinen Server.</p>
@@ -714,7 +693,7 @@ export default function Settings({ onConnected }) {
           </section>
         )}
 
-        {loaded && activeTab === 'bibliotheken' && (
+        {loaded && section === 'bibliotheken' && (
           <section>
             <h2 className="text-lg font-semibold mb-1">Plex Bibliotheken</h2>
             <p className="text-sm text-zinc-400 mb-4">Wähle die Film-Bibliotheken, aus denen PlexDice würfeln soll, und synchronisiere sie.</p>
@@ -808,9 +787,9 @@ export default function Settings({ onConnected }) {
           </section>
         )}
 
-        {loaded && activeTab === 'quiz' && <QuizConfig />}
+        {loaded && section === 'quiz' && <QuizConfig />}
 
-        {loaded && activeTab === 'ueber' && (
+        {loaded && section === 'ueber' && (
           <section className="space-y-4">
             <div className="rounded-2xl bg-zinc-900 ring-1 ring-zinc-800 p-4">
               <div className="flex items-center gap-3">
@@ -889,7 +868,7 @@ export default function Settings({ onConnected }) {
           </section>
         )}
 
-        {loaded && activeTab === 'allgemein' && (
+        {loaded && section === 'allgemein' && (
           <section className="space-y-4">
             <div className="rounded-2xl bg-zinc-900 ring-1 ring-zinc-800 p-4">
               <h3 className="text-sm font-semibold text-zinc-200 mb-1">Startseite</h3>
@@ -942,7 +921,7 @@ export default function Settings({ onConnected }) {
                 </button>
                 <button
                   type="button"
-                  onClick={() => setActiveTab('bibliotheken')}
+                  onClick={() => setSection('bibliotheken')}
                   className="w-full min-h-[44px] px-4 py-2.5 rounded-xl bg-zinc-800 text-zinc-100 text-sm font-medium flex items-center justify-center gap-2 active:scale-[0.98] transition-transform"
                 >
                   <Database className="w-4 h-4" /> Library-Cache neu aufbauen
