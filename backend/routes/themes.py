@@ -12,10 +12,15 @@ bp = Blueprint("themes", __name__, url_prefix="/api/themes")
 
 @bp.post("/enrich")
 def enrich():
-    """Start a background batch of ``count`` random uncached movies (default 200)."""
+    """Start a background batch of ``count`` random uncached movies (default 200; "all" = the lot)."""
     body = request.get_json(silent=True) or {}
     raw = body.get("count", 200)
-    count = int(raw) if isinstance(raw, (int, float)) and not isinstance(raw, bool) else 200
+    if raw == "all" or (isinstance(raw, (int, float)) and not isinstance(raw, bool) and raw <= 0):
+        count: object = "all"
+    elif isinstance(raw, (int, float)) and not isinstance(raw, bool):
+        count = int(raw)
+    else:
+        count = 200
     result = theme_enrichment.start_enrichment_batch(count)
     return jsonify(result)
 
@@ -24,6 +29,15 @@ def enrich():
 def status():
     """Live progress of the running/last batch, merged with library + cache totals."""
     return jsonify(theme_enrichment.get_status())
+
+
+@bp.get("/sample")
+def sample():
+    """A random eligible theme (preview + title/composer) to hear in Settings. 404 if none."""
+    result = theme_enrichment.random_sample()
+    if result is None:
+        return jsonify({"error": "Keine Hörprobe vorhanden"}), 404
+    return jsonify(result)
 
 
 @bp.post("/retry-previews")

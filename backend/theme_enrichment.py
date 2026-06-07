@@ -378,6 +378,21 @@ def list_eligible() -> List[str]:
     return [mid for mid, e in cache.items() if isinstance(e, dict) and e.get("preview_url")]
 
 
+def random_sample() -> Optional[Dict[str, Any]]:
+    """A random eligible cache entry for the Settings 'play a sample' diagnostic. None if none."""
+    cache = load_theme_cache()
+    eligible = [e for e in cache.values() if isinstance(e, dict) and e.get("preview_url")]
+    if not eligible:
+        return None
+    entry = random.choice(eligible)
+    return {
+        "preview_url": entry.get("preview_url"),
+        "title": entry.get("title"),
+        "composer": entry.get("composer"),
+        "theme_title": entry.get("theme_title"),
+    }
+
+
 def _partition_uncached(
     movies: List[Dict[str, Any]], cache: Dict[str, Any]
 ) -> Tuple[List[Dict[str, Any]], int]:
@@ -479,28 +494,43 @@ def _run_batch(count: int) -> None:
         logger.info("Theme batch finished")
 
 
-def start_enrichment_batch(count: int) -> dict:
-    """Kick off a background batch of ``count`` random uncached movies.
+def _resolve_batch_target(count: Any) -> int:
+    """Resolve a requested batch size to a concrete target.
+
+    ``"all"`` or a non-positive number means "every not-yet-cached movie"; otherwise the given
+    count (min 1)."""
+    process_all = count == "all" or (
+        isinstance(count, (int, float)) and not isinstance(count, bool) and count <= 0
+    )
+    if process_all:
+        movies = _load_movies()
+        uncached, _ = _partition_uncached(movies, load_theme_cache())
+        return len(uncached)
+    return max(1, int(count))
+
+
+def start_enrichment_batch(count: Any) -> dict:
+    """Kick off a background batch of ``count`` random uncached movies (``"all"`` = the lot).
 
     Returns ``{"started": False, "reason": "already_running"}`` if a run is in progress,
-    otherwise ``{"started": True, "target": count}`` immediately (work continues async).
+    otherwise ``{"started": True, "target": N}`` immediately (work continues async).
     """
-    count = max(1, int(count))
+    target = _resolve_batch_target(count)
     with _status_lock:
         if _status["running"]:
             return {"started": False, "reason": "already_running"}
         _status.update({
             "running": True,
             "processed": 0,
-            "target": count,
+            "target": target,
             "matched": 0,
             "mode": "enrich",
             "started_at": _now_iso(),
             "finished_at": None,
             "error": None,
         })
-    threading.Thread(target=_run_batch, args=(count,), daemon=True).start()
-    return {"started": True, "target": count}
+    threading.Thread(target=_run_batch, args=(target,), daemon=True).start()
+    return {"started": True, "target": target}
 
 
 # ---- Keyless preview retry (U1): re-run iTunes for themes that still lack a preview ----
@@ -597,7 +627,8 @@ def get_status() -> dict:
     with _status_lock:
         snapshot = dict(_status)
     cache = load_theme_cache()
-    total_movies = len(_load_movies())
+    movies = _load_movies()
+    total_movies = len(movies)
     total_cached = len(cache)
     eligible_count = sum(
         1 for e in cache.values() if isinstance(e, dict) and e.get("preview_url")
@@ -607,6 +638,15 @@ def get_status() -> dict:
         1 for e in cache.values()
         if isinstance(e, dict) and (e.get("composer") or e.get("theme_title"))
     )
+    # Seed diagnostics (X1.1): how many library movies the seed resolves — the instant proof the
+    # pre-scan is in use. If this is high but theme_identified is low, the rest just isn't processed.
+    seed_covers = sum(
+        1 for m in movies
+        if theme_seed.lookup(str(m.get("title") or "").strip(),
+                             str(m.get("originalTitle") or "").strip() or None)
+    )
+    with _metrics_lock:
+        last_pass = {"seed_hits": _metrics.get("seed_hits", 0), "haiku_calls": _metrics.get("haiku_calls", 0)}
     snapshot.update({
         "total_movies": total_movies,
         "total_cached": total_cached,
@@ -616,5 +656,10 @@ def get_status() -> dict:
         "theme_identified": theme_identified,
         "preview_found": eligible_count,
         "theme_without_preview": max(0, theme_identified - eligible_count),
+        "seed_loaded": theme_seed.is_loaded(),
+        "seed_size": theme_seed.seed_size(),
+        "seed_path": theme_seed.seed_path(),
+        "seed_covers_library": seed_covers,
+        "last_pass": last_pass,
     })
     return snapshot
