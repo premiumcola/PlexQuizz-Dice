@@ -87,6 +87,7 @@ _status: Dict[str, Any] = {
     "processed": 0,
     "target": 0,
     "matched": 0,
+    "mode": None,  # "enrich" | "retry" | None — which pass is/was running (U1)
     "started_at": None,
     "finished_at": None,
     "error": None,
@@ -493,12 +494,102 @@ def start_enrichment_batch(count: int) -> dict:
             "processed": 0,
             "target": count,
             "matched": 0,
+            "mode": "enrich",
             "started_at": _now_iso(),
             "finished_at": None,
             "error": None,
         })
     threading.Thread(target=_run_batch, args=(count,), daemon=True).start()
     return {"started": True, "target": count}
+
+
+# ---- Keyless preview retry (U1): re-run iTunes for themes that still lack a preview ----
+
+def _retryable(cache: Dict[str, Any]) -> List[Tuple[str, dict]]:
+    """Cached entries that HAVE a theme (composer/title) but NO preview yet."""
+    return [
+        (mid, e) for mid, e in cache.items()
+        if isinstance(e, dict) and (e.get("composer") or e.get("theme_title")) and not e.get("preview_url")
+    ]
+
+
+def _update_preview(movie_id: str, preview: dict) -> None:
+    """Fill the preview fields on ONE existing, preview-less entry. Targeted, never destructive.
+
+    Re-reads under the lock and updates only when the entry EXISTS and currently has a falsy
+    ``preview_url`` — an entry that already has a preview is never overwritten, none is removed,
+    and no other file is touched.
+    """
+    with _write_lock:
+        cache = load_theme_cache()
+        entry = cache.get(movie_id)
+        if not isinstance(entry, dict) or entry.get("preview_url"):
+            return
+        entry.update(preview)
+        entry["eligible"] = bool(preview.get("preview_url"))
+        entry["retried_at"] = _now_iso()
+        cache[movie_id] = entry
+        atomic_write_json(_THEME_PATH, cache, ensure_ascii=False)
+
+
+def _run_preview_retry(count: int) -> None:
+    """Re-run the iTunes lookup for up to ``count`` preview-less themed entries (keyless)."""
+    try:
+        retryable = _retryable(load_theme_cache())
+        random.shuffle(retryable)
+        batch = retryable[: max(0, count)]
+        logger.info("Preview retry: %d retryable, processing %d", len(retryable), len(batch))
+        for movie_id, entry in batch:
+            preview = None
+            try:
+                preview = search_itunes_preview(entry.get("composer") or "", entry.get("theme_title") or "")
+            except Exception as exc:  # noqa: BLE001 — one bad lookup must not stop the batch
+                logger.warning("Preview retry failed for id=%s: %s", movie_id, exc)
+            hit = bool(preview and preview.get("preview_url"))
+            if hit:
+                _update_preview(movie_id, preview)
+            with _status_lock:
+                _status["processed"] += 1
+                if hit:
+                    _status["matched"] += 1
+    except Exception as exc:  # noqa: BLE001 — fatal: surface the message to the UI
+        logger.exception("Preview retry crashed")
+        with _status_lock:
+            _status["error"] = str(exc)
+    finally:
+        with _status_lock:
+            _status["running"] = False
+            _status["finished_at"] = _now_iso()
+        logger.info("Preview retry finished")
+
+
+def start_preview_retry(count: int) -> dict:
+    """Kick off a keyless background pass that fills previews for already-identified themes.
+
+    Returns ``{"started": False, "reason": "nothing_to_retry"}`` when nothing is retryable,
+    ``{"started": False, "reason": "already_running"}`` if a pass is in progress, else
+    ``{"started": True, "target": N}`` immediately.
+    """
+    count = max(1, int(count))
+    retryable = len(_retryable(load_theme_cache()))
+    if retryable == 0:
+        return {"started": False, "reason": "nothing_to_retry"}
+    target = min(count, retryable)
+    with _status_lock:
+        if _status["running"]:
+            return {"started": False, "reason": "already_running"}
+        _status.update({
+            "running": True,
+            "processed": 0,
+            "target": target,
+            "matched": 0,
+            "mode": "retry",
+            "started_at": _now_iso(),
+            "finished_at": None,
+            "error": None,
+        })
+    threading.Thread(target=_run_preview_retry, args=(count,), daemon=True).start()
+    return {"started": True, "target": target}
 
 
 def get_status() -> dict:
@@ -511,11 +602,19 @@ def get_status() -> dict:
     eligible_count = sum(
         1 for e in cache.values() if isinstance(e, dict) and e.get("preview_url")
     )
+    # Two stages (U1): a theme was identified (composer/title) vs. a playable preview found.
+    theme_identified = sum(
+        1 for e in cache.values()
+        if isinstance(e, dict) and (e.get("composer") or e.get("theme_title"))
+    )
     snapshot.update({
         "total_movies": total_movies,
         "total_cached": total_cached,
         "eligible_count": eligible_count,
         "no_match_count": total_cached - eligible_count,
         "remaining": max(0, total_movies - total_cached),
+        "theme_identified": theme_identified,
+        "preview_found": eligible_count,
+        "theme_without_preview": max(0, theme_identified - eligible_count),
     })
     return snapshot

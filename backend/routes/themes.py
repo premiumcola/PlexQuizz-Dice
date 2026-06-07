@@ -25,6 +25,16 @@ def status():
     return jsonify(theme_enrichment.get_status())
 
 
+@bp.post("/retry-previews")
+def retry_previews():
+    """POST /api/themes/retry-previews — keyless: re-run iTunes only for identified
+    themes that still lack a preview_url (fills missing previews, never overwrites)."""
+    body = request.get_json(silent=True) or {}
+    raw = body.get("count", 200)
+    count = int(raw) if isinstance(raw, (int, float)) and not isinstance(raw, bool) else 200
+    return jsonify(theme_enrichment.start_preview_retry(count))
+
+
 @bp.get("/eligible")
 def eligible():
     """Ids (and count) of cached movies that have a streamable preview."""
