@@ -4,17 +4,7 @@ import { scoreSeriesGuess, answerSeriesGuess, seriesHint } from '../../api';
 import { playSound } from './audio';
 import WaveStage from './WaveStage';
 import WuerfelInput from './WuerfelInput';
-
-// The series title is known client-side (it came from /eligible), so the tile skeleton is built
-// locally; hint letters still come from the server endpoint for one shared code path.
-function slotsFromTitle(title) {
-  return Array.from(title || '', (ch) => (/[\p{L}\p{N}]/u.test(ch) ? { gap: false } : { gap: true, char: ch }));
-}
-function lockedFromHint(resp, slots) {
-  const out = {};
-  for (const r of resp.revealed || []) if (slots[r.index] && !slots[r.index].gap) out[r.index] = r.char;
-  return out;
-}
+import { slotsFromTitle, lockedFromHint } from './hintTiles';
 
 // T2.3/T2.4 — one TV-series theme question: stream the show's Plex theme (user-gesture Play),
 // type the series title, watch a debounced live meter, and on a correct guess reveal the poster

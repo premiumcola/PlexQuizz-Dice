@@ -5,21 +5,7 @@ import { plexAppUrl } from '../../lib/plexLink';
 import { playSound } from './audio';
 import WaveStage from './WaveStage';
 import WuerfelInput from './WuerfelInput';
-
-// Build the tile skeleton from a level-0 hint ({length, revealed:[only gaps]}).
-function slotsFromSkeleton(resp) {
-  const gaps = {};
-  for (const r of resp.revealed || []) gaps[r.index] = r.char;
-  return Array.from({ length: resp.length || 0 }, (_, i) => (
-    i in gaps ? { gap: true, char: gaps[i] } : { gap: false }
-  ));
-}
-// Letter positions (non-gap) revealed by a hint level.
-function lockedFromHint(resp, slots) {
-  const out = {};
-  for (const r of resp.revealed || []) if (slots[r.index] && !slots[r.index].gap) out[r.index] = r.char;
-  return out;
-}
+import { slotsFromSkeleton, lockedFromHint } from './hintTiles';
 
 // L4.4 — one Film-Theme question: stream the 30s preview (user-gesture Play, iOS-safe),
 // type the film title, watch a debounced live match meter, and on an accepted/correct guess
