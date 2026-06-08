@@ -37,6 +37,20 @@ def atomic_write_json(path: str, data: Any, **dump_kwargs: Any) -> bool:
         return False
 
 
+def read_json(path: str, default: Any = None) -> Any:
+    """Read JSON from ``path`` (utf-8), returning ``default`` if it is missing or corrupt.
+
+    Mirrors :func:`atomic_write_json` on the read side: a missing file or invalid
+    JSON yields the caller's default instead of raising, so callers don't have to
+    repeat the same try/except around every cache load.
+    """
+    try:
+        with open(path, "r", encoding="utf-8") as fh:
+            return json.load(fh)
+    except (OSError, json.JSONDecodeError):
+        return default
+
+
 def file_size(path: str) -> int:
     """Bytes on disk at ``path``, or 0 if it is missing/unreadable."""
     try:

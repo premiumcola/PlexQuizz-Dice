@@ -29,7 +29,7 @@ import requests
 
 import net_setup
 import theme_seed
-from atomic_io import atomic_write_json
+from atomic_io import atomic_write_json, read_json
 
 logger = logging.getLogger(__name__)
 
@@ -340,23 +340,14 @@ def _stable_id(movie: dict) -> Optional[str]:
 
 
 def _load_movies() -> List[Dict[str, Any]]:
-    try:
-        with open(_LIBRARY_PATH, "r", encoding="utf-8") as fh:
-            data = json.load(fh)
-    except (OSError, json.JSONDecodeError) as exc:
-        logger.warning("Could not read library cache at %s: %s", _LIBRARY_PATH, exc)
-        return []
+    data = read_json(_LIBRARY_PATH, {})
     movies = data.get("movies", []) if isinstance(data, dict) else []
     return [m for m in movies if isinstance(m, dict)]
 
 
 def load_theme_cache() -> Dict[str, Any]:
-    try:
-        with open(_THEME_PATH, "r", encoding="utf-8") as fh:
-            data = json.load(fh)
-        return data if isinstance(data, dict) else {}
-    except (OSError, json.JSONDecodeError):
-        return {}
+    data = read_json(_THEME_PATH)
+    return data if isinstance(data, dict) else {}
 
 
 def _store_entry(movie_id: str, entry: dict) -> int:

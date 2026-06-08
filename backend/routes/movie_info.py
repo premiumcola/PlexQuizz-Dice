@@ -1,7 +1,6 @@
 """Keyless movie-info endpoint: metadata facts + Wikipedia synopsis, cached 24h."""
 from __future__ import annotations
 
-import json
 import os
 import threading
 import time
@@ -10,7 +9,7 @@ from typing import Any, Dict
 from flask import Blueprint, jsonify, request
 
 import movie_info
-from atomic_io import atomic_write_json
+from atomic_io import atomic_write_json, read_json
 from services import DATA_DIR, library_cache
 
 bp = Blueprint("movie_info", __name__, url_prefix="/api/movie")
@@ -21,11 +20,7 @@ _lock = threading.Lock()
 
 
 def _load() -> Dict[str, Any]:
-    try:
-        with open(_CACHE_PATH, "r", encoding="utf-8") as fh:
-            return json.load(fh)
-    except (OSError, json.JSONDecodeError):
-        return {}
+    return read_json(_CACHE_PATH, {})
 
 
 def _save(cache: Dict[str, Any]) -> None:
