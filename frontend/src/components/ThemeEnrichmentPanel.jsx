@@ -182,7 +182,7 @@ export default function ThemeEnrichmentPanel() {
           {sampleErr && <div className="mt-2 text-xs text-zinc-500 text-center">{sampleErr}</div>}
 
           {statusError && (
-            <div className="mt-3 p-3 rounded-xl bg-rose-500/10 border border-rose-500/30 text-rose-200 text-xs flex items-start gap-2">
+            <div className="mt-3 p-3 rounded-xl bg-rose-500/15 text-rose-200 text-xs flex items-start gap-2">
               <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />
               <span className="min-w-0 break-words">{statusError}</span>
             </div>

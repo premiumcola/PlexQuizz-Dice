@@ -392,7 +392,7 @@ export default function Dice({ onNeedSettings }) {
           {moviesReady && movies.length === 0 && (
             <button
               onClick={() => onNeedSettings?.()}
-              className="w-full mb-4 p-4 rounded-2xl bg-amber-500/10 border border-amber-500/30 text-left active:scale-[0.99] transition-transform"
+              className="w-full mb-4 p-4 rounded-2xl bg-amber-500/15 text-left active:scale-[0.99] transition-transform"
             >
               <div className="flex items-start gap-3">
                 <AlertCircle className="w-5 h-5 text-amber-400 shrink-0 mt-0.5" />
@@ -475,7 +475,7 @@ export default function Dice({ onNeedSettings }) {
               the last control clear of the home indicator; overscroll-contain stops the scroll from
               chaining to the page. No position:fixed (which jumps on iOS). */}
           {showFilters && (
-            <div className="mb-4 p-4 pb-[calc(1rem+env(safe-area-inset-bottom))] rounded-2xl bg-zinc-900/60 border border-zinc-800 max-h-[70dvh] overflow-y-auto overscroll-contain">
+            <div className="mb-4 p-4 pb-[calc(1rem+env(safe-area-inset-bottom))] rounded-2xl bg-zinc-900/60 ring-1 ring-zinc-800 max-h-[70dvh] overflow-y-auto overscroll-contain">
               <MovieFilterPanel
                 movies={movies}
                 genreGroups={genreGroups} setGenreGroups={setGenreGroups} allGenres={allGenres}
@@ -495,7 +495,7 @@ export default function Dice({ onNeedSettings }) {
 
           {/* History panel */}
           {showHistory && history.length > 0 && (
-            <div className="mb-4 p-4 rounded-2xl bg-zinc-900/60 border border-zinc-800">
+            <div className="mb-4 p-4 rounded-2xl bg-zinc-900/60 ring-1 ring-zinc-800">
               <div className="flex items-center justify-between mb-3">
                 <h3 className="text-sm font-medium text-zinc-300">Letzte Würfe</h3>
                 <button onClick={() => setHistory([])} className="text-xs text-amber-400/80 active:text-amber-300 font-medium">leeren</button>
@@ -503,7 +503,7 @@ export default function Dice({ onNeedSettings }) {
               <div className="space-y-1.5">
                 {history.map((m, i) => (
                   <button key={m.key ?? i} onClick={() => selectPicked(m)}
-                    className="w-full text-left px-3 py-2 rounded-xl bg-zinc-950/60 border border-zinc-800/60 active:scale-[0.98] transition-transform">
+                    className="w-full text-left px-3 py-2 rounded-xl bg-zinc-950/60 ring-1 ring-zinc-800/60 active:scale-[0.98] transition-transform">
                     <div className="text-sm font-medium text-zinc-200 truncate">{m.t}</div>
                     <div className="text-xs text-zinc-400">{m.y} · {(m.g || []).slice(0, 2).join(', ')}</div>
                   </button>
@@ -542,7 +542,7 @@ export default function Dice({ onNeedSettings }) {
           })()}
 
           {filtered.length === 0 && movies.length > 0 && (
-            <div className="mt-4 p-4 rounded-2xl bg-rose-500/10 border border-rose-500/20 flex items-start gap-3">
+            <div className="mt-4 p-4 rounded-2xl bg-rose-500/15 flex items-start gap-3">
               <AlertCircle className="w-5 h-5 text-rose-400 shrink-0 mt-0.5" />
               <div className="text-sm text-rose-200">Keine Filme entsprechen deinen Filtern. Reduziere ein paar Kriterien.</div>
             </div>
@@ -550,7 +550,7 @@ export default function Dice({ onNeedSettings }) {
 
           {/* Rolling ticker card */}
           {rolling && ticker && (
-            <article className="mt-6 rounded-3xl bg-gradient-to-br from-amber-500/15 to-zinc-900/40 border border-amber-400/30 overflow-hidden">
+            <article className="mt-6 rounded-3xl bg-gradient-to-br from-amber-500/15 to-zinc-900/40 ring-1 ring-amber-400/30 overflow-hidden">
               <div className="p-6 sm:p-8 text-center">
                 <span className="text-xs uppercase tracking-widest text-amber-400 font-medium block mb-3">Würfle…</span>
                 <h2 className="font-display-tight text-2xl sm:text-3xl leading-tight tracking-tight text-zinc-300 truncate">
@@ -603,7 +603,7 @@ export default function Dice({ onNeedSettings }) {
                         </span>
                       )}
                       {picked.s != null && (
-                        <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-amber-500/10 text-amber-300 border border-amber-500/20 text-sm font-medium">
+                        <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-amber-500/15 text-amber-300 text-sm font-medium">
                           <Star className="w-3.5 h-3.5 fill-amber-400 text-amber-400" /> {picked.s.toFixed(1).replace('.', ',')}
                         </span>
                       )}
@@ -634,7 +634,7 @@ export default function Dice({ onNeedSettings }) {
                 <div className="mt-3">
                   {!aiInfo && !aiLoading && (
                     <button onClick={() => fetchInfo()}
-                      className="w-full py-3 rounded-xl bg-amber-500/15 border border-amber-500/30 text-amber-200 text-sm font-medium flex items-center justify-center gap-2 active:scale-[0.98] transition-transform">
+                      className="w-full py-3 rounded-xl bg-amber-500/15 text-amber-200 text-sm font-medium flex items-center justify-center gap-2 active:scale-[0.98] transition-transform">
                       <Sparkles className="w-4 h-4" /> Erzähl mir was über den Film
                     </button>
                   )}
@@ -708,21 +708,21 @@ export default function Dice({ onNeedSettings }) {
                         document.addEventListener('visibilitychange', cancel, { once: true });
                         window.location.href = appUrl;
                       }}
-                      className="py-3 rounded-xl bg-rose-500/15 border border-rose-500/30 text-rose-200 text-sm font-medium flex items-center justify-center gap-1.5 active:scale-[0.98] transition-transform"
+                      className="py-3 rounded-xl bg-rose-500/15 text-rose-200 text-sm font-medium flex items-center justify-center gap-1.5 active:scale-[0.98] transition-transform"
                     >
                       <Youtube className="w-4 h-4" /> Trailer
                     </button>
                     <a
                       href={`https://www.imdb.com/find/?q=${encodeURIComponent(picked.o || picked.t)}&s=tt&ttype=ft`}
                       target="_blank" rel="noopener noreferrer"
-                      className="py-3 rounded-xl bg-amber-500/15 border border-amber-500/30 text-amber-200 text-sm font-medium flex items-center justify-center gap-1.5 active:scale-[0.98] transition-transform"
+                      className="py-3 rounded-xl bg-amber-500/15 text-amber-200 text-sm font-medium flex items-center justify-center gap-1.5 active:scale-[0.98] transition-transform"
                     >
                       <ExternalLink className="w-4 h-4" /> IMDb
                     </a>
                     <a
                       href={`https://thetvdb.com/search?query=${encodeURIComponent(picked.o && picked.o !== picked.t ? picked.o : picked.t)}`}
                       target="_blank" rel="noopener noreferrer"
-                      className="py-3 rounded-xl bg-emerald-500/15 border border-emerald-500/30 text-emerald-200 text-sm font-medium flex items-center justify-center gap-1.5 active:scale-[0.98] transition-transform"
+                      className="py-3 rounded-xl bg-emerald-500/15 text-emerald-200 text-sm font-medium flex items-center justify-center gap-1.5 active:scale-[0.98] transition-transform"
                     >
                       <Tv2 className="w-4 h-4" /> TheTVDB
                     </a>

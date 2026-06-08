@@ -488,7 +488,7 @@ export default function Settings({ onConnected, section = 'plex', setSection }) 
   useEffect(() => () => stopPolling(), [stopPolling]);
 
   const serverFields = (
-    <div className="rounded-2xl bg-zinc-900/60 border border-zinc-800 px-4 divide-y divide-zinc-800/60">
+    <div className="rounded-2xl bg-zinc-900/60 ring-1 ring-zinc-800 px-4 divide-y divide-zinc-800/60">
       <Row label="Server">
         <div className="flex gap-2">
           <select
@@ -628,7 +628,7 @@ export default function Settings({ onConnected, section = 'plex', setSection }) 
                 )}
                 {!polling && !loginError && <p className="text-sm text-zinc-400 mt-3">Du wirst kurz zu plex.tv weitergeleitet.</p>}
                 {!polling && loginError && (
-                  <div className="mt-4 w-full max-w-xs p-3 rounded-xl bg-rose-500/10 border border-rose-500/30 text-rose-200 text-sm flex flex-col items-center gap-2">
+                  <div className="mt-4 w-full max-w-xs p-3 rounded-xl bg-rose-500/15 text-rose-200 text-sm flex flex-col items-center gap-2">
                     <div className="flex items-start gap-2">
                       <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />
                       <span>{loginError}</span>
@@ -661,12 +661,12 @@ export default function Settings({ onConnected, section = 'plex', setSection }) 
                 {serverFields}
 
                 {testResult && testResult.ok && (
-                  <div className="mt-4 p-3 rounded-xl bg-emerald-500/10 border border-emerald-500/30 text-emerald-200 text-sm flex items-center gap-2">
+                  <div className="mt-4 p-3 rounded-xl bg-emerald-500/15 text-emerald-200 text-sm flex items-center gap-2">
                     <Check className="w-4 h-4" /> Verbunden mit <span className="font-semibold">{testResult.server_name}</span> (v{testResult.version}) · {testResult.library_sections?.length || 0} Film-Bibliotheken
                   </div>
                 )}
                 {testError && (
-                  <div className="mt-4 p-3 rounded-xl bg-rose-500/10 border border-rose-500/30 text-rose-200 text-sm flex items-center gap-2">
+                  <div className="mt-4 p-3 rounded-xl bg-rose-500/15 text-rose-200 text-sm flex items-center gap-2">
                     <AlertCircle className="w-4 h-4" /> {testError}
                   </div>
                 )}
@@ -699,7 +699,7 @@ export default function Settings({ onConnected, section = 'plex', setSection }) 
             <p className="text-sm text-zinc-400 mb-4">Wähle die Film-Bibliotheken, aus denen PlexDice würfeln soll, und synchronisiere sie.</p>
 
             {!user && (
-              <div className="p-4 rounded-2xl bg-amber-500/10 border border-amber-500/30 text-amber-100 text-sm flex items-center gap-2">
+              <div className="p-4 rounded-2xl bg-amber-500/15 text-amber-100 text-sm flex items-center gap-2">
                 <AlertCircle className="w-4 h-4" /> Bitte zuerst im Plex-Tab anmelden.
               </div>
             )}
@@ -712,7 +712,7 @@ export default function Settings({ onConnected, section = 'plex', setSection }) 
               <button
                 onClick={doTest}
                 disabled={!hostname}
-                className="w-full p-4 rounded-2xl bg-zinc-900/60 border border-zinc-800 text-zinc-300 text-sm flex items-center justify-center gap-2 active:scale-[0.99] transition-transform disabled:opacity-40"
+                className="w-full p-4 rounded-2xl bg-zinc-900/60 ring-1 ring-zinc-800 text-zinc-300 text-sm flex items-center justify-center gap-2 active:scale-[0.99] transition-transform disabled:opacity-40"
               >
                 <RefreshCw className="w-4 h-4" /> Bibliotheken vom Server laden
               </button>
@@ -775,12 +775,12 @@ export default function Settings({ onConnected, section = 'plex', setSection }) 
             )}
 
             {syncResult && (
-              <div className="mt-3 p-3 rounded-xl bg-emerald-500/10 border border-emerald-500/30 text-emerald-200 text-sm flex items-center gap-2">
+              <div className="mt-3 p-3 rounded-xl bg-emerald-500/15 text-emerald-200 text-sm flex items-center gap-2">
                 <Check className="w-4 h-4" /> {syncResult.count} Filme synchronisiert
               </div>
             )}
             {syncError && (
-              <div className="mt-3 p-3 rounded-xl bg-rose-500/10 border border-rose-500/30 text-rose-200 text-sm flex items-center gap-2">
+              <div className="mt-3 p-3 rounded-xl bg-rose-500/15 text-rose-200 text-sm flex items-center gap-2">
                 <AlertCircle className="w-4 h-4" /> {syncError}
               </div>
             )}

@@ -149,7 +149,7 @@ export default function MovieFilterPanel({
       </div>
 
       <button onClick={onReset}
-        className="w-full min-h-[44px] py-2 rounded-xl bg-zinc-800/60 text-zinc-300 text-sm font-medium border border-zinc-800 active:scale-[0.98] transition-transform flex items-center justify-center gap-2">
+        className="w-full min-h-[44px] py-2 rounded-xl bg-zinc-800/60 text-zinc-300 text-sm font-medium ring-1 ring-zinc-800 active:scale-[0.98] transition-transform flex items-center justify-center gap-2">
         <X className="w-3.5 h-3.5" /> Filter zurücksetzen
       </button>
     </div>
