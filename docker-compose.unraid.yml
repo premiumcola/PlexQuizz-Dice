@@ -1,0 +1,61 @@
+# Unraid deployment compose file — runs ON the Unraid server.
+#
+# Unlike the root docker-compose.yml (which BUILDS the image locally for dev),
+# this file PULLS the prebuilt image from GHCR. The GitHub Action publishes
+# ghcr.io/premiumcola/plexquizz-dice:latest on every push to main, and the
+# watchtower service below auto-pulls + recreates the container when a new
+# :latest appears.
+#
+# The image is in a PRIVATE GHCR package. The read credentials used to pull it
+# are supplied MANUALLY on the Unraid host (never committed here):
+#   docker login ghcr.io -u <github-user> -p <PAT-with-read:packages>
+# That writes ~/.docker/config.json, which both the manual pull and watchtower
+# reuse. Do not put the PAT in this file.
+
+services:
+  plexdice:
+    # PULL the published image (no build context on Unraid).
+    image: ghcr.io/premiumcola/plexquizz-dice:latest
+    container_name: plexdice
+    ports:
+      # Host 8090 -> container 8080 (8099 is taken by tam-spy).
+      - "8090:8080"
+    volumes:
+      # Persistent state lives here. Change this Unraid appdata path to match
+      # your install; everything (settings, Plex token, caches) survives here.
+      - /mnt/user/appdata/plexdice/data:/data
+    environment:
+      # Left empty on purpose — set the real values on the Unraid host (Docker
+      # template env vars) or via the in-app settings page (stored in /data).
+      # Never commit a real token here.
+      #   PLEX_URL  e.g. https://plex.example.com:32400
+      #   PLEX_TOKEN  your X-Plex-Token
+      - PLEX_URL=
+      - PLEX_TOKEN=
+    # Force public resolvers so Plex's *.plex.direct hostnames always resolve.
+    dns:
+      - 1.1.1.1
+      - 8.8.8.8
+    restart: unless-stopped
+    labels:
+      # Opt this container IN to watchtower's label-scoped watching.
+      - "com.centurylinklabs.watchtower.enable=true"
+
+  watchtower:
+    # Maintained fork of the original (unmaintained) containrrr/watchtower.
+    image: beatkind/watchtower
+    container_name: plexdice-watchtower
+    volumes:
+      # Lets watchtower talk to the Docker daemon to pull + recreate.
+      - /var/run/docker.sock:/var/run/docker.sock
+      # Reuse the manual `docker login ghcr.io` credentials to pull the private
+      # image. This is the ONLY way GHCR read creds reach watchtower — not here.
+      - /root/.docker/config.json:/config.json:ro
+    command:
+      # --label-enable: only watch containers with the enable=true label above,
+      # so watchtower touches plexdice ONLY and leaves other containers alone.
+      - "--label-enable"
+      - "--cleanup"
+      - "--interval"
+      - "300"
+    restart: unless-stopped
