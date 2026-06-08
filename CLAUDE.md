@@ -4,8 +4,7 @@ A web app that picks random movies from a Plex library based on
 configurable filters (genre, year, runtime, FSK, rating).
 PWA-installable on iOS/Android home screen. Talks to Plex live via API.
 
-**Repo:** github.com/premiumcola/PlexDice (private)
-**Working dir:** D:\CLAUDE_code\PlexDice (Windows host, WSL access via /mnt/d/CLAUDE_code/PlexDice)
+**Repo:** github.com/premiumcola/PlexQuizz-Dice (private)
 **Container port:** 8090 (8099 is taken by tam-spy)
 
 ## Stack
@@ -98,11 +97,26 @@ Heuristik triggert. Im Zweifel: zwei Tool-Calls.
 - Accent color: `#f5a623` (PlexDice orange)
 - Background: `zinc-950` (#09090b), surfaces `zinc-900` (#18181b)
 
-## Docker
+## Docker / Deploy
 
-- After all changes: `docker compose up --build -d`
-- Check `docker logs plexdice --tail 50`
-- Done only when no errors in logs
+This environment has NO Docker daemon — never run `docker` or
+`docker compose` here. Building and deploying happens via CI/CD.
+
+Flow after changes:
+
+1. Edit code.
+2. Verify locally without Docker:
+   - Backend: `python3 -m py_compile` on changed files.
+   - Frontend: `npm run build` in `frontend/`.
+3. Commit and push to `main` (see git rules above).
+4. The GitHub Action (`.github/workflows/deploy.yml`) builds the
+   Dockerfile and pushes `ghcr.io/premiumcola/plexquizz-dice`
+   tagged `:latest` and `:<commit-sha>`.
+5. Watchtower on the Unraid server detects the new `:latest`,
+   pulls it, and recreates the `plexdice` container automatically.
+
+The Unraid stack runs from `docker-compose.unraid.yml` (pulls the
+GHCR image; does not build).
 
 ## Repo structure (target)
 
