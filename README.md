@@ -40,10 +40,43 @@ for 24h.
 
 ## Quick start (Unraid)
 
-_Placeholder._ Add the PlexDice container via Community Apps / a custom
-template: image built from this repo, host port **8090 → 8080**, and map a
-host path to **/data** for persistent settings + cache. Provide `PLEX_URL`
-and `PLEX_TOKEN` as container variables.
+Unraid pulls the prebuilt image from GHCR (it does **not** build). Every push
+to `main` triggers a GitHub Action that builds the Dockerfile and publishes
+`ghcr.io/premiumcola/plexquizz-dice:latest` (plus a commit-sha tag), and
+Watchtower on the server auto-deploys it.
+
+**One-time setup on the Unraid host:**
+
+1. Authenticate to the private GHCR package so the image can be pulled. Use a
+   GitHub PAT with `read:packages`:
+
+   ```bash
+   docker login ghcr.io -u <github-user> -p <PAT-with-read:packages>
+   ```
+
+   This writes `~/.docker/config.json`, which both the manual pull and
+   Watchtower reuse. The PAT is **never** committed to the repo.
+
+2. Copy `docker-compose.unraid.yml` to the server, edit the placeholders:
+   - the `/data` mount → your appdata path (e.g.
+     `/mnt/user/appdata/plexdice/data`),
+   - `PLEX_URL` / `PLEX_TOKEN` (or leave them and configure via the settings
+     page at runtime).
+
+3. Start the stack:
+
+   ```bash
+   docker compose -f docker-compose.unraid.yml up -d
+   ```
+
+   This launches **plexdice** (host **8090 → 8080**) and a **watchtower**
+   service.
+
+**Auto-update loop:** Watchtower is label-scoped — it watches *only* the
+`plexdice` container (via the `com.centurylinklabs.watchtower.enable=true`
+label) and polls GHCR. When the GitHub Action publishes a new `:latest`,
+Watchtower pulls it and recreates the container automatically, so a `git push`
+to `main` is all it takes to ship.
 
 ## Getting your Plex token
 
