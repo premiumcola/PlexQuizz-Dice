@@ -87,11 +87,25 @@ The token is stored only in `data/settings.json` on the server and is never
 returned to the browser (the GET `/api/settings` response redacts it, and Plex
 thumbnails are proxied through the backend so the token never leaves it).
 
+## Quiz mode
+
+The **Quiz** tab is a group game built from the same Plex library. Set up a
+round (players, length, difficulty), then play through mixed question modes —
+cover→title, actor→movie, movie→actor, plot→movie, **series** questions, and
+audio **Hörprobe** theme samples — with a live scoreboard, leaderboard and
+optional group photos. Series posters and theme songs are scanned and cached
+in the background so questions load instantly.
+
+Theme-song enrichment (matching a movie/series to its main theme for the
+Hörprobe) is **optional** and only runs when an `ANTHROPIC_API_KEY` env var is
+set. Everything else in the quiz works without any API key.
+
 ## How it works
 
 - **Backend** — Python 3.11 + Flask + [python-plexapi](https://github.com/pkkid/python-plexapi),
-  served by gunicorn. Stores everything as JSON in `/data`
-  (`settings.json`, `library_cache.json`, `movie_info_cache.json`, quiz data).
+  served by gunicorn. Stores everything as JSON in `/data` — `settings.json`,
+  `library_cache.json`, `series_cache.json`, `movie_info_cache.json`, theme
+  caches/seeds, and quiz state (leaderboard, players, history, stats).
 - **Frontend** — Vite + React + Tailwind, built to static files and served by
   Flask in production (SPA fallback for client routes).
 - **Docker** — multi-stage build (Node builds the frontend, Python runtime
@@ -102,12 +116,22 @@ thumbnails are proxied through the backend so the token never leaves it).
 | Method | Path | Purpose |
 | ------ | ---- | ------- |
 | GET  | `/api/library` | Cached movies (refresh-on-empty) |
-| POST | `/api/library/refresh` | Re-sync from Plex |
+| POST | `/api/library/refresh` | Re-sync movies from Plex |
 | GET  | `/api/library/thumb/<key>` | Token-safe Plex poster/art proxy |
 | GET/POST | `/api/settings` | Read (redacted) / save settings |
 | POST | `/api/plex/discover` | List account servers from plex.tv |
 | POST | `/api/plex/test` | Test a connection, list movie sections |
+| GET  | `/api/plex/client-id` | Stable client id for Plex deep links |
 | POST | `/api/movie/info` | Keyless facts + Wikipedia synopsis (cached 24h) |
+| GET  | `/api/series/coverage` | Series scan status / coverage |
+| POST | `/api/series/rescan` | Re-scan series + theme assets |
+| POST | `/api/themes/enrich` | Optional theme-song enrichment (needs API key) |
+| GET  | `/api/quiz/question` | Next quiz question |
+| POST | `/api/quiz/answer` | Submit an answer, get score |
+| GET  | `/api/health` | Liveness check |
+
+(Quiz blueprints also expose session, leaderboard, photo and reveal
+endpoints under `/api/quiz/…`.)
 
 ## Icons
 

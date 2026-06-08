@@ -1,17 +1,32 @@
 # PlexDice
 
-A web app that picks random movies from a Plex library based on
-configurable filters (genre, year, runtime, FSK, rating).
+Display name **Plex Quiz & Dice** — two modes on top of a Plex library:
+
+- **Würfeln (Dice)** — picks a random movie from configurable filters
+  (genre, year, runtime, FSK, rating), with a slot-machine roll and
+  one-tap deep links to play in Plex. Keyless "Erzähl mir was über den
+  Film" pulls real facts from cached Plex metadata + a German-Wikipedia
+  synopsis.
+- **Quiz** — group game with rounds, scoreboard and group photos.
+  Question modes include cover→title, actor→movie, movie→actor,
+  plot→movie, plus series questions and audio "Hörprobe" theme samples.
+
 PWA-installable on iOS/Android home screen. Talks to Plex live via API.
+The repo, Docker container and `/data` layout keep the original
+`plexdice` name — only the display name changed.
 
 **Repo:** github.com/premiumcola/PlexQuizz-Dice (private)
 **Container port:** 8090 (8099 is taken by tam-spy)
 
 ## Stack
 
-- Backend: Python 3.11 + Flask + python-plexapi + Anthropic SDK
+- Backend: Python 3.11 + Flask + python-plexapi, served by gunicorn.
+  Anthropic SDK is **optional** — only used for quiz theme-song
+  enrichment when `ANTHROPIC_API_KEY` is set; the app runs without it.
 - Frontend: Vite + React + Tailwind, served as static via Flask in prod
-- Storage: JSON files in /data (settings.json, library_cache.json, ai_cache.json)
+- Storage: JSON files in /data — `settings.json`, `library_cache.json`,
+  `series_cache.json`, `movie_info_cache.json`, theme caches/seeds, and
+  quiz state (`leaderboard.json`, `players.json`, `quiz_history.json`, …)
 - Runtime: Docker (multi-stage build), local dev + Unraid deploy
 
 ## Behavior
@@ -118,27 +133,39 @@ Flow after changes:
 The Unraid stack runs from `docker-compose.unraid.yml` (pulls the
 GHCR image; does not build).
 
-## Repo structure (target)
+## Repo structure
 
 ```
 plexdice/
-├── docker-compose.yml
-├── Dockerfile              # multi-stage: node build + python runtime
-├── .env.example
-├── CLAUDE.md               # this file
+├── docker-compose.yml            # local build + run
+├── docker-compose.unraid.yml     # Unraid: pulls GHCR image, + watchtower
+├── Dockerfile                    # multi-stage: node build + python runtime
+├── .env.example                  # PLEX_URL/PLEX_TOKEN/LOG_LEVEL
+├── .github/workflows/deploy.yml  # build + push image to GHCR
+├── CLAUDE.md                     # this file
 ├── README.md
 ├── backend/
-│   ├── server.py
+│   ├── server.py                 # Flask app: blueprints + SPA hosting
+│   ├── services.py               # singletons wired into routes
 │   ├── settings.py
 │   ├── plex_client.py
-│   ├── library_cache.py
-│   ├── ai_enrich.py
-│   └── routes/
+│   ├── library_cache.py          # movie library cache
+│   ├── series_cache.py / series_scan.py / series_quiz.py
+│   ├── movie_info.py             # keyless facts + Wikipedia synopsis
+│   ├── theme_*.py                # quiz theme-song enrichment/seed/quiz
+│   ├── quiz_hints.py / fuzzy_match.py / atomic_io.py / net_setup.py
+│   ├── routes/                   # library, settings, plex, plex_auth,
+│   │                             #   movie_info, themes, series,
+│   │                             #   quiz_solutions, cache, health
+│   └── quiz/                     # quiz blueprint + game logic
+│       └── routes.py, session.py, generator.py, modes.py, …
 └── frontend/
     ├── src/
-    │   ├── pages/Dice.jsx       # ported from reference/filmwuerfel-original.jsx
-    │   └── pages/Settings.jsx   # Seerr-style, see reference/seerr-settings.png
-    └── public/                  # manifest.json, service-worker.js, icons/
+    │   ├── pages/Dice.jsx        # ported from reference/filmwuerfel-original.jsx
+    │   ├── pages/Settings.jsx    # Seerr-style, see reference/seerr-settings.png
+    │   ├── pages/Quiz/           # quiz flow (setup → play → result → review)
+    │   └── components/           # AppHeader, filter panels, icons, …
+    └── public/                   # manifest.json, service-worker.js, icons/, sounds/
 ```
 
 ## Reference files
