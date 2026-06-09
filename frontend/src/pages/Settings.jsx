@@ -792,18 +792,17 @@ export default function Settings({ onConnected, section = 'plex', setSection }) 
         {loaded && section === 'ueber' && (
           <section className="space-y-4">
             <div className="rounded-2xl bg-zinc-900 ring-1 ring-zinc-800 p-4">
+              {/* Top row: icon + name + version pill only. The long commit SHA used to live here
+                  in a flex sibling and collapsed the title/description column — it now lives on its
+                  own line(s) in the meta block below, so nothing overlaps on a 393px iPhone. */}
               <div className="flex items-center gap-3">
                 <DieIcon className="w-10 h-10 shrink-0" />
-                <div className="flex-1 min-w-0">
-                  <div className="font-extrabold text-2xl text-zinc-100 leading-none">PlexDice</div>
-                  <p className="text-sm text-zinc-400 mt-1">Plex Companion fürs Filmwürfeln und Quizzen.</p>
-                </div>
-                <div className="shrink-0 self-start text-right">
-                  <span className="block text-xs font-mono text-zinc-400 px-2 py-1 rounded-lg bg-zinc-800">v{APP_VERSION}</span>
-                  <span className="block mt-1 text-[10px] font-mono text-zinc-500 tabular-nums">{BUILD_HASH} · {BUILD_TIME}</span>
-                </div>
+                <div className="flex-1 min-w-0 font-extrabold text-2xl text-zinc-100 leading-none truncate">PlexDice</div>
+                <span className="shrink-0 text-xs font-mono text-zinc-300 px-2 py-1 rounded-lg bg-zinc-800">v{APP_VERSION}</span>
               </div>
-              <ShellDiag />
+              {/* Description on its own full-width line — never squeezed into a narrow flex column. */}
+              <p className="text-sm text-zinc-400 mt-2">Plex Companion fürs Filmwürfeln und Quizzen.</p>
+              <div className="mt-3 text-[10px] font-mono text-zinc-500 tabular-nums break-all">{BUILD_HASH} · {BUILD_TIME}</div>
             </div>
 
             <div className="rounded-2xl bg-zinc-900 ring-1 ring-zinc-800 p-4">
@@ -865,6 +864,8 @@ export default function Settings({ onConnected, section = 'plex', setSection }) 
                 </pre>
               )}
             </div>
+
+            <ShellDiag />
           </section>
         )}
 
