@@ -7,7 +7,7 @@ import {
 import {
   getSettings, saveSettings, discoverServers, testConnection, refreshLibrary,
   createPlexPin, checkPlexPin, plexLogout, getPlexConnectionInfo, ensurePlexClientId,
-  getPersistence, clearAiCache,
+  getPersistence, clearAiCache, getBuildInfo,
 } from '../api';
 import DieIcon from '../components/DieIcon';
 import ThemeEnrichmentPanel from '../components/ThemeEnrichmentPanel';
@@ -18,6 +18,24 @@ const APP_VERSION = import.meta.env.VITE_APP_VERSION || '1.0.0';
 // Build stamp so the live (possibly PWA-cached) build is identifiable on-device.
 const BUILD_HASH = import.meta.env.VITE_BUILD_HASH || 'local';
 const BUILD_TIME = (import.meta.env.VITE_BUILD_TIME || '').replace('T', ' ').slice(0, 16);
+const COMMIT_URL = 'https://github.com/premiumcola/PlexDice/commit/';
+
+// "Online seit" — process/container start as a German relative + absolute value, e.g.
+// "3 Std. (09.06. 12:44)". Honest about being process start (also resets on a manual restart).
+function formatOnlineSince(startedAt) {
+  if (!startedAt) return '';
+  const start = new Date(startedAt);
+  if (Number.isNaN(start.getTime())) return '';
+  const mins = Math.max(0, Math.floor((Date.now() - start.getTime()) / 60000));
+  let rel;
+  if (mins < 1) rel = 'gerade eben';
+  else if (mins < 60) rel = `${mins} Min.`;
+  else if (mins < 1440) rel = `${Math.floor(mins / 60)} Std.`;
+  else rel = `${Math.floor(mins / 1440)} Tg.`;
+  const p = (n) => String(n).padStart(2, '0');
+  const abs = `${p(start.getDate())}.${p(start.getMonth() + 1)}. ${p(start.getHours())}:${p(start.getMinutes())}`;
+  return `${rel} (${abs})`;
+}
 
 // Shell-geometry diagnostics — a safety net for the iOS standalone app-height fix, shown next to
 // the build stamp. html, body AND #root must ALL equal screenH (932): if a parent (html/body)
@@ -165,6 +183,8 @@ export default function Settings({ onConnected, section = 'plex', setSection }) 
   const [toast, setToast] = useState(null);
   const [persist, setPersist] = useState(null);
   const [persistLoading, setPersistLoading] = useState(false);
+  const [buildInfo, setBuildInfo] = useState(null);
+  const [diagOpen, setDiagOpen] = useState(false);
   const [startTab, setStartTab] = useState('last');
   const [reduceMotion, setReduceMotion] = useState(false);
 
@@ -194,6 +214,11 @@ export default function Settings({ onConnected, section = 'plex', setSection }) 
     } finally {
       setPersistLoading(false);
     }
+  }, []);
+
+  // Container/process start time for the About tab's "Online seit" — best-effort, silent on error.
+  useEffect(() => {
+    getBuildInfo().then(setBuildInfo).catch(() => {});
   }, []);
 
   const refreshConnInfo = useCallback(async () => {
@@ -802,7 +827,48 @@ export default function Settings({ onConnected, section = 'plex', setSection }) 
               </div>
               {/* Description on its own full-width line — never squeezed into a narrow flex column. */}
               <p className="text-sm text-zinc-400 mt-2">Plex Companion fürs Filmwürfeln und Quizzen.</p>
-              <div className="mt-3 text-[10px] font-mono text-zinc-500 tabular-nums break-all">{BUILD_HASH} · {BUILD_TIME}</div>
+
+              {/* Build/deploy meta — its own block (darker zinc-950 step for depth). The commit is
+                  shown SHORT as a GitHub link with a copy button for the full SHA, so a long token
+                  can never collapse a neighbour again. */}
+              <div className="mt-4 rounded-xl bg-zinc-950/60 p-3 space-y-2 text-xs">
+                <div className="flex items-center gap-2">
+                  <span className="text-zinc-500 shrink-0 w-20">Commit</span>
+                  {BUILD_HASH === 'local' ? (
+                    <span className="font-mono text-zinc-300">local</span>
+                  ) : (
+                    <>
+                      <a
+                        href={`${COMMIT_URL}${BUILD_HASH}`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="font-mono text-amber-300 active:text-amber-200 truncate"
+                      >
+                        {BUILD_HASH.slice(0, 10)}
+                      </a>
+                      <button
+                        type="button"
+                        onClick={() => copyText(BUILD_HASH)}
+                        aria-label="Vollständige Commit-SHA kopieren"
+                        title="Kopieren"
+                        className="shrink-0 p-3 -my-2 rounded-lg text-zinc-400 active:text-amber-300 active:scale-95"
+                      >
+                        <Clipboard className="w-4 h-4" />
+                      </button>
+                    </>
+                  )}
+                </div>
+                {BUILD_TIME && (
+                  <div className="flex items-center gap-2">
+                    <span className="text-zinc-500 shrink-0 w-20">Build</span>
+                    <span className="font-mono text-zinc-300">{BUILD_TIME}</span>
+                  </div>
+                )}
+                <div className="flex items-center gap-2">
+                  <span className="text-zinc-500 shrink-0 w-20">Online seit</span>
+                  <span className="font-mono text-zinc-300">{formatOnlineSince(buildInfo?.started_at) || '–'}</span>
+                </div>
+              </div>
             </div>
 
             <div className="rounded-2xl bg-zinc-900 ring-1 ring-zinc-800 p-4">

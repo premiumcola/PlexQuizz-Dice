@@ -103,6 +103,11 @@ export function getPersistence() {
   return fetch('/api/health/persistence').then(unwrap);
 }
 
+// When the current container/process started (ISO-8601 UTC) — resets on every redeploy/restart.
+export function getBuildInfo() {
+  return fetch('/api/health/build').then(unwrap);
+}
+
 export function clearAiCache() {
   return postJson('/api/cache/ai/clear', {});
 }
