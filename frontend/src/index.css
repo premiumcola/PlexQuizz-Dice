@@ -6,8 +6,12 @@ html {
   font-family: 'Inter', system-ui, sans-serif;
   font-feature-settings: 'cv11', 'ss01', 'ss03';
   font-variation-settings: 'opsz' 18;
-  height: 100vh; /* fallback for browsers without dvh */
+  /* --app-height is set ONLY in an installed (standalone) PWA by the inline script in index.html:
+     there 100dvh resolves to the short LAYOUT viewport while the webview paints the full screen, so
+     the bottom nav would float up with the body's #09090b peeking below it. In a normal browser tab
+     --app-height is unset → the 100dvh fallback wins and the shell tracks the URL bar. */
   height: 100dvh;
+  height: var(--app-height, 100dvh);
   margin: 0;
   overflow: hidden;
   overscroll-behavior: none;
@@ -41,8 +45,8 @@ html {
    extended below the fold and its final cards were unreachable). body is overflow:hidden so the
    ONLY scroller is <main>; overscroll locked → no rubber-band. */
 body {
-  height: 100vh;
   height: 100dvh;
+  height: var(--app-height, 100dvh);
   margin: 0;
   overflow: hidden;
   overscroll-behavior: none;
@@ -51,11 +55,14 @@ body {
 }
 
 #root {
-  /* Normal-flow flex column at the dynamic visible height. NO position:fixed/inset, so it can't
-     mismatch the visual viewport; dvh tracks the real visible area (URL bar / safe areas), so the
-     bottom nav sits at the visible bottom and <main> scrolls fully. */
-  height: 100vh;
+  /* Normal-flow flex column — NO position:fixed/inset, so it can't mismatch the viewport. In a
+     browser tab the 100dvh fallback tracks the visible area (URL bar / safe areas). In a standalone
+     PWA the inline script in index.html pins --app-height to the full screen height, so the shell
+     reaches the physical bottom and the bottom nav (last flex child) is flush — no #09090b band
+     below it. min-height matches so the body can never peek through on a sub-pixel rounding gap. */
   height: 100dvh;
+  height: var(--app-height, 100dvh);
+  min-height: var(--app-height, 100dvh);
   display: flex;
   flex-direction: column;
   background: #09090b;

@@ -8,10 +8,10 @@ import './index.css';
 // (?debug=1 or the plexdice_debug flag). Lazy — when disabled nothing is imported. See debug.js.
 initDebug();
 
-// Viewport height is now pure CSS (index.css: html/body/#root use 100dvh — the dynamic visible
-// viewport), so the only scroller (<main>) is exactly the visible height and its last content
-// always scrolls into view. This replaced a JS Math.max(innerHeight, screen.height) that overshot
-// the visible viewport and pushed the final cards / bottom nav below the fold.
+// Viewport height: a browser tab uses pure CSS 100dvh (the dynamic visible viewport), so <main> —
+// the only scroller — is exactly the visible height. An installed standalone PWA additionally pins
+// --app-height to the full screen height (inline script in index.html) because there 100dvh
+// undershoots to the layout viewport, which would float the bottom nav up over a black band.
 
 createRoot(document.getElementById('root')).render(
   <StrictMode>

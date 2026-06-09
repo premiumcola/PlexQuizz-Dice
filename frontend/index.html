@@ -13,6 +13,30 @@
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght,SOFT,WONK@9..144,300..900,0..100,0..1&family=Inter:opsz,wght@14..32,400..800&display=swap" />
     <title>Plex Quiz &amp; Dice</title>
+    <script>
+      // Installed (standalone) PWA on iOS: 100dvh resolves to the short LAYOUT viewport while the
+      // webview paints the FULL screen, so the bottom tab bar floats up and the body's #09090b
+      // peeks through below it (the recurring "floating bar + black band" bug). Pin --app-height to
+      // the full screen height in standalone so the shell reaches the physical bottom and the nav
+      // is flush. A normal browser tab leaves --app-height unset → CSS falls back to 100dvh and
+      // tracks the URL bar. Runs at parse time, before React paints → flush from the first frame.
+      (function () {
+        function syncAppHeight() {
+          var standalone =
+            (window.matchMedia && window.matchMedia('(display-mode: standalone)').matches) ||
+            window.navigator.standalone === true;
+          var root = document.documentElement;
+          if (standalone) {
+            root.style.setProperty('--app-height', Math.max(window.innerHeight, window.screen.height) + 'px');
+          } else {
+            root.style.removeProperty('--app-height');
+          }
+        }
+        syncAppHeight();
+        window.addEventListener('resize', syncAppHeight);
+        window.addEventListener('orientationchange', syncAppHeight);
+      })();
+    </script>
   </head>
   <body>
     <div id="root"></div>
