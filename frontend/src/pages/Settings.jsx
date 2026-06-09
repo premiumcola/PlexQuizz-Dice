@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 import {
   Server, RefreshCw, Loader2, Check, AlertCircle, Save, Library,
   Settings as SettingsIcon, Database, Plug, LogOut, Clipboard,
-  ExternalLink, Github, Activity, ShieldCheck, Trash2, Tv,
+  ExternalLink, Github, Activity, ShieldCheck, Trash2, Tv, ChevronDown,
 } from 'lucide-react';
 import {
   getSettings, saveSettings, discoverServers, testConnection, refreshLibrary,
@@ -931,7 +931,24 @@ export default function Settings({ onConnected, section = 'plex', setSection }) 
               )}
             </div>
 
-            <ShellDiag />
+            {/* Diagnose — the shell-geometry readout, collapsed by default so it never clutters the
+                header. Plain useState toggle (no hover-only behaviour); 44px+ tap target. */}
+            <div className="rounded-2xl bg-zinc-900 ring-1 ring-zinc-800 overflow-hidden">
+              <button
+                type="button"
+                onClick={() => setDiagOpen((o) => !o)}
+                aria-expanded={diagOpen}
+                className="w-full min-h-[44px] px-4 py-3 flex items-center justify-between gap-2 text-sm font-semibold text-zinc-200 active:bg-zinc-800/50 transition-colors"
+              >
+                <span className="flex items-center gap-2"><Activity className="w-4 h-4 text-zinc-400" /> Diagnose</span>
+                <ChevronDown className={`w-4 h-4 text-zinc-400 transition-transform ${diagOpen ? 'rotate-180' : ''}`} />
+              </button>
+              {diagOpen && (
+                <div className="px-4 pb-4">
+                  <ShellDiag />
+                </div>
+              )}
+            </div>
           </section>
         )}
 
