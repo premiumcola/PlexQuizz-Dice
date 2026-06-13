@@ -20,47 +20,57 @@ const STATE_RING = {
 };
 const nodeColor = (state) => ({ correct: GREEN, wrong: RED, idle: '#52525b' }[state] || ACCENT);
 
-const CHIP_H = 48; // approx thin-chip height used by the width fit
+const CHIP_H = 48; // fallback chip height (used only before a chip is measured)
 const ROW_GAP = 14; // approx column row gap
-const W_MAX = 176; // cap element width so covers aren't oversized on tall/desktop viewports
+const W_MAX = 176; // cap poster width so covers aren't oversized on tall/desktop viewports
+const CENTER_GAP = 24; // matches the sm column gap; mobile (12) is narrower → posters stay safely inside
 
-// ONE element width for the whole board: the largest width where BOTH columns still fit the available
-// height without page scroll (posters 1.5·W tall, portraits 1·W, chips ~CHIP_H), capped by the per-
-// column width and W_MAX. Every cover AND chip then shares this width → tidy on desktop and mobile.
-function useConnectWidth(leftItems, rightItems, ref) {
+// Poster width for the board: the largest width where BOTH columns of posters still fit the available
+// height without page scroll, given the MEASURED (wrapped) chip heights. Chips span the full column
+// width (always wider-or-equal to a poster) and can wrap to any number of lines, so only the posters
+// are height-bound here. Re-fits on resize / new round. Capped by half the board and W_MAX.
+function usePosterWidth(leftIds, rightIds, byId, ref, chipEls) {
   const [w, setW] = useState(0);
   useLayoutEffect(() => {
-    const fitH = (items, H) => {
-      const units = items.reduce((s, it) => s + (it.kind === 'text' ? 0 : it.aspect === '1/1' ? 1 : 1.5), 0);
-      const chipsH = items.filter((it) => it.kind === 'text').length * CHIP_H;
-      const avail = H - chipsH - Math.max(0, items.length - 1) * ROW_GAP;
+    const chipH = (id) => chipEls.current[id]?.getBoundingClientRect().height || CHIP_H;
+    const colFit = (ids, H) => {
+      const units = ids.reduce((s, id) => {
+        const it = byId[id];
+        return s + (it.kind === 'text' ? 0 : it.aspect === '1/1' ? 1 : 1.5);
+      }, 0);
+      const chipsH = ids.reduce((s, id) => s + (byId[id].kind === 'text' ? chipH(id) : 0), 0);
+      const avail = H - chipsH - Math.max(0, ids.length - 1) * ROW_GAP;
       return units > 0 ? avail / units : Infinity;
     };
     const compute = () => {
       const el = ref.current;
       if (!el || !el.clientHeight || !el.clientWidth) return;
-      const colMaxW = (el.clientWidth - 24) / 2; // two flex-1 columns minus the centre flex gap
-      const next = Math.max(48, Math.floor(Math.min(W_MAX, colMaxW, fitH(leftItems, el.clientHeight), fitH(rightItems, el.clientHeight))));
+      const colMaxW = (el.clientWidth - CENTER_GAP) / 2; // two flex-1 columns minus the centre gap
+      const next = Math.max(48, Math.floor(Math.min(W_MAX, colMaxW, colFit(leftIds, el.clientHeight), colFit(rightIds, el.clientHeight))));
       setW((p) => (Math.abs(p - next) < 1 ? p : next));
     };
     compute();
     const ro = new ResizeObserver(compute);
     if (ref.current) ro.observe(ref.current);
     return () => ro.disconnect();
-  }, [leftItems, rightItems, ref]);
+  }, [leftIds, rightIds, byId, ref, chipEls]);
   return w;
 }
 
-// One connect item, sized by its column WIDTH (so chips and covers share one width): a film poster
-// (2:3 → height 1.5·W), an actor portrait (1:1 → height W), or a thin text token chip. Posters/
-// portraits keep aspect (object-cover, never distorted); actor-relation poster names are blurred.
-function ConnectItem({ item, relation, state }) {
+// One connect item: a film poster (2:3 → height 1.5·posterW), an actor portrait (1:1 → square
+// posterW), or a text token chip. Posters/portraits keep aspect (object-cover, never distorted) and
+// use the height-fit posterW; actor-relation poster names are blurred. Text chips span the FULL
+// column width (so they read wider than a poster) and wrap to as many lines as the label needs.
+function ConnectItem({ item, relation, state, posterW, chipRef }) {
   const ring = STATE_RING[state] || STATE_RING.idle;
   if (item.kind === 'image') {
     const portrait = item.aspect === '1/1';
     const bands = !portrait && OPTIONS_BLUR_NAME_BANDS.has(relation);
     return (
-      <div className={`relative w-full ${portrait ? 'aspect-square' : 'aspect-[2/3]'} rounded-xl overflow-hidden bg-zinc-800 ${ring}`}>
+      <div
+        className={`relative ${portrait ? 'aspect-square' : 'aspect-[2/3]'} rounded-xl overflow-hidden bg-zinc-800 ${ring}`}
+        style={{ width: posterW || undefined }}
+      >
         {item.content ? (
           <img src={item.content} alt="" draggable="false" className={`absolute inset-0 w-full h-full object-cover ${portrait ? 'object-top' : 'object-center'}`} />
         ) : (
@@ -75,11 +85,15 @@ function ConnectItem({ item, relation, state }) {
       </div>
     );
   }
-  // Thin token chip spans its column with centered text, so its inner edge (and node) sits on the
-  // same rail as the posters' nodes while the chip itself looks centred, not jammed to one side.
+  // Text token chip: full column width (wider-or-equal to a poster) with the inner edge on the column
+  // rail, so its node lines up with the poster nodes. No clamp → the full label wraps and reads, never
+  // "…". Measured (chipRef) so the posters are sized to fit around the chips' real wrapped height.
   return (
-    <div className={`w-full flex items-center justify-center rounded-xl bg-zinc-800 ${ring} px-3 py-2 text-center`}>
-      <span className="text-sm sm:text-base font-semibold text-zinc-100 leading-tight line-clamp-2">{renderRedactedPlot(item.content)}</span>
+    <div
+      ref={chipRef}
+      className={`w-full min-h-[44px] flex items-center justify-center rounded-xl bg-zinc-800 ${ring} px-3 py-2.5 text-center`}
+    >
+      <span className="text-sm sm:text-base font-semibold text-zinc-100 leading-snug break-words">{renderRedactedPlot(item.content)}</span>
     </div>
   );
 }
@@ -93,12 +107,12 @@ export default function QuizConnect({ question, locked, onSubmit }) {
   const { left, right } = question.columns;
   const leftSet = useMemo(() => new Set(left), [left]);
   const correctKeys = useMemo(() => new Set(question.pairs.map((p) => connectionKey(p.left, p.right))), [question]);
-  const leftItems = useMemo(() => left.map((id) => byId[id]), [left, byId]);
-  const rightItems = useMemo(() => right.map((id) => byId[id]), [right, byId]);
   const { reduceMotion } = usePrefs();
 
   const containerRef = useRef(null);
-  const colW = useConnectWidth(leftItems, rightItems, containerRef);
+  const chipEls = useRef({});
+  const setChipRef = (id) => (el) => { if (el) chipEls.current[id] = el; };
+  const posterW = usePosterWidth(left, right, byId, containerRef, chipEls);
   const nodeEls = useRef({});
   const dragRef = useRef(null);
   const [links, setLinks] = useState({}); // itemId -> partnerId (stored both directions)
@@ -133,7 +147,7 @@ export default function QuizConnect({ question, locked, onSubmit }) {
     const ro = new ResizeObserver(measure);
     if (containerRef.current) ro.observe(containerRef.current);
     return () => ro.disconnect();
-  }, [question, colW]);
+  }, [question, posterW]);
 
   // New round → clear all links.
   useEffect(() => { setLinks({}); setPending(null); setDragPos(null); }, [question]);
@@ -218,47 +232,65 @@ export default function QuizConnect({ question, locked, onSubmit }) {
     return 'linked';
   };
 
-  // A full-height column flush to the container's OUTER wall (left col → left, right col → right);
-  // its items are sized to colW so covers and chips share ONE width. The node is anchored ON each
-  // item's inner edge → all of a column's nodes sit on one vertical rail facing the centre gap.
-  const Column = ({ ids, side }) => (
-    <div className={`flex-1 min-w-0 h-full flex flex-col justify-center gap-2 sm:gap-3 ${side === 'left' ? 'items-start' : 'items-end'}`}>
-      {ids.map((id) => {
-        const item = byId[id];
-        const state = itemState(id);
-        return (
-          <div
-            key={id}
-            data-item={id}
-            role="button"
-            tabIndex={0}
-            aria-label="Verbinden"
-            onPointerDown={(e) => onDown(id, e)}
-            onPointerMove={onMove}
-            onPointerUp={(e) => onUp(id, e)}
-            style={{ width: colW || undefined }}
-            className="relative max-w-full touch-none select-none cursor-pointer active:opacity-90"
-          >
-            <ConnectItem item={item} relation={question.relation} state={state} />
-            <span
-              ref={setNodeRef(id)}
-              className="absolute top-1/2 -translate-y-1/2 w-3.5 h-3.5 rounded-full ring-2 ring-zinc-950 z-10 pointer-events-none"
-              style={{ [side === 'left' ? 'right' : 'left']: '-6px', background: nodeColor(state) }}
-              aria-hidden="true"
-            />
-          </div>
-        );
-      })}
-    </div>
-  );
+  // A full-height column whose item rows span the full column width and hang from the centre rail:
+  // each item's content (poster, portrait or chip) is aligned to the column's INNER edge, so every
+  // node — at that inner edge — sits on ONE vertical rail facing the centre gap, regardless of the
+  // item's own width. The WHOLE row is the connection target; the node is just its visible handle.
+  const Column = ({ ids, side }) => {
+    const inner = side === 'left' ? 'right' : 'left';
+    return (
+      <div className="flex-1 min-w-0 h-full flex flex-col justify-center gap-2 sm:gap-3">
+        {ids.map((id) => {
+          const item = byId[id];
+          const state = itemState(id);
+          const armed = state === 'pending';
+          return (
+            <div
+              key={id}
+              data-item={id}
+              role="button"
+              tabIndex={0}
+              aria-label="Verbinden"
+              onPointerDown={(e) => onDown(id, e)}
+              onPointerMove={onMove}
+              onPointerUp={(e) => onUp(id, e)}
+              className={`relative w-full flex ${side === 'left' ? 'justify-end' : 'justify-start'} touch-none select-none cursor-pointer active:opacity-90`}
+            >
+              <ConnectItem
+                item={item}
+                relation={question.relation}
+                state={state}
+                posterW={posterW}
+                chipRef={item.kind === 'text' ? setChipRef(id) : undefined}
+              />
+              {/* Internal hit-slop: a comfortable ≥44px grab zone at the rail. Height-clamped to this
+                  item (centered, h-11) so the larger tap area NEVER reaches the row above/below. */}
+              <span aria-hidden="true" className="absolute top-1/2 -translate-y-1/2 h-11 w-10 z-[5]" style={{ [inner]: '-10px' }} />
+              {/* Connection handle: a clear, tappable dot on the rail. Grows + glows accent when armed
+                  (first tap) so it is obvious where to start and that the next tap completes the pair. */}
+              <span
+                ref={setNodeRef(id)}
+                aria-hidden="true"
+                className={`absolute top-1/2 -translate-y-1/2 rounded-full z-10 ${armed ? 'w-6 h-6' : 'w-5 h-5'} ${reduceMotion ? '' : 'transition-all duration-150'}`}
+                style={{
+                  [inner]: armed ? '-9px' : '-8px',
+                  background: nodeColor(state),
+                  boxShadow: armed ? `0 0 0 2px #09090b, 0 0 0 6px ${ACCENT}59` : '0 0 0 2px #09090b',
+                }}
+              />
+            </div>
+          );
+        })}
+      </div>
+    );
+  };
 
   return (
     <div className="flex-1 min-h-0 flex flex-col px-3 sm:px-6 pt-3 pb-[max(0.75rem,env(safe-area-inset-bottom))]">
       {allCorrect && !reduceMotion && <Fireworks variant="bursts" />}
-      {/* Centred, max-width board: two full-height columns flush to the outer walls with the connection
-          gap between them. Items are sized to colW (height-bound, capped at W_MAX) and hug the outer
-          edge, so the board neither sprawls on a wide desktop nor collapses to a narrow centre strip,
-          and it fills the width on mobile. */}
+      {/* Centred, max-width board: two full-height columns with the connection gap between them. Items
+          hang from the centre rail — posters height-bound (capped at W_MAX), chips full column width —
+          so the board neither sprawls on a wide desktop nor collapses to a narrow strip on mobile. */}
       <div ref={containerRef} className="relative flex-1 min-h-0 w-full max-w-xl mx-auto flex items-stretch gap-3 sm:gap-6">
         <Column ids={left} side="left" />
         <Column ids={right} side="right" />
