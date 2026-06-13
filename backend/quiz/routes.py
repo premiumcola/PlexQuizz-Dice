@@ -54,6 +54,37 @@ def _readable(option: dict | None) -> str | None:
     return option.get("content") if option.get("kind") == "text" else option.get("label")
 
 
+def _option_view(opt: dict) -> dict:
+    """Compact, display-only view of an option/item for the review reveal: its stable id, readable
+    text and (for image options) a thumbnail url."""
+    return {
+        "id": opt.get("id"),
+        "text": _readable(opt),
+        "thumb": opt.get("content") if opt.get("kind") == "image" else None,
+    }
+
+
+def _reveal_fields(q: dict, first_chosen) -> dict:
+    """Display-only data letting the review reveal the FULL correct answer for multi-select and
+    connect rounds (single-select rounds already carry chosen_text / correct_text). Purely additive —
+    it never affects scoring or grading."""
+    if not q.get("multi_select"):
+        return {}
+    chosen_ids = first_chosen if isinstance(first_chosen, list) else []
+    fields: dict = {
+        "multi_select": True,
+        "correct_option_ids": q.get("correct_option_ids") or [],
+        "chosen_option_ids": chosen_ids,
+    }
+    if q.get("mode") == "connect":
+        # Reveal the correct left↔right pairs and the items needed to render them.
+        fields["pairs"] = q.get("pairs") or []
+        fields["items"] = {it["id"]: _option_view(it) for it in q.get("items", [])}
+    else:
+        fields["options"] = [_option_view(o) for o in q.get("options", [])]
+    return fields
+
+
 @bp.post("/round/new")
 def new_round():
     body = request.get_json(silent=True) or {}
@@ -160,6 +191,7 @@ def complete(round_id: str):
                 "chosen_text": _readable(options.get(first_chosen_id)),
                 "correct_text": _readable(options.get(q.get("correct_option_id"))),
                 "time_ms": ans.get("time_ms"),
+                **_reveal_fields(q, first_chosen),
             }
         )
     record = {
