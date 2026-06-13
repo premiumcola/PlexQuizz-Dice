@@ -138,6 +138,11 @@ export function quizAbandon(roundId) {
 export function quizHistory() {
   return fetch('/api/quiz/history').then(unwrap);
 }
+// Persist a fully client-assembled (sessionless) round into the shared history store. Idempotent by
+// id on the server, so calling it again with the same round never creates a duplicate.
+export function quizPersistRound(record) {
+  return postJson('/api/quiz/history', record);
+}
 export function quizRound(roundId) {
   return fetch(`/api/quiz/history/${roundId}`).then(unwrap);
 }

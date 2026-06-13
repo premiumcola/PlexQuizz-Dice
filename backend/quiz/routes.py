@@ -4,6 +4,7 @@ from __future__ import annotations
 import logging
 import os
 from datetime import datetime, timezone
+from typing import Any
 
 from flask import Blueprint, jsonify, request, send_file
 
@@ -83,6 +84,27 @@ def _reveal_fields(q: dict, first_chosen) -> dict:
     else:
         fields["options"] = [_option_view(o) for o in q.get("options", [])]
     return fields
+
+
+def _as_int(value: Any) -> int:
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return 0
+
+
+# The only per-question fields a client-assembled (sessionless) round may persist — a strict allow-list
+# so a posted round can never write a Plex deep-link / token or arbitrary blob into the history store.
+_SESSIONLESS_Q_FIELDS = ("id", "mode", "correct", "movie_key", "movie_title", "movie_year", "correct_text", "chosen_text")
+
+
+def _sanitize_question(q: Any) -> dict:
+    """Keep only the allow-listed, display-only fields from a posted sessionless question."""
+    if not isinstance(q, dict):
+        return {}
+    out = {k: q.get(k) for k in _SESSIONLESS_Q_FIELDS if q.get(k) is not None}
+    out["correct"] = bool(q.get("correct"))
+    return out
 
 
 @bp.post("/round/new")
@@ -209,7 +231,10 @@ def complete(round_id: str):
         "mastery": session.stats_payload(),
     }
     history.add_round(record)
-    sessions.drop(round_id)
+    # Keep the in-memory session alive (it is ephemeral, dropped on restart): the result screen
+    # auto-persists on mount and the optional "Speichern" re-completes to attach a photo / names —
+    # add_round is idempotent by id, so re-completing updates the round without duplicating it. The
+    # session also still backs /state and /solutions for the Auflösung after finishing.
     return jsonify(record)
 
 
@@ -225,6 +250,35 @@ def abandon(round_id: str):
 @bp.get("/history")
 def history_list():
     return jsonify({"rounds": history.list_rounds()})
+
+
+@bp.post("/history")
+def history_add():
+    """Persist a fully client-assembled (sessionless) round — Sound / Serien / Mixed carry no server
+    session — into the SAME history store the normal rounds use, so it appears in the "Runden" list.
+    Idempotent by id (re-posting the same id never duplicates). Additive: this does not touch scoring,
+    the shared leaderboard, or any settings/cache file."""
+    body = request.get_json(silent=True) or {}
+    round_id = str(body.get("id") or "").strip()
+    if not round_id:
+        return jsonify({"error": "id required"}), 400
+    record = {
+        "id": round_id,
+        "name": (str(body.get("name") or "").strip() or "Runde"),
+        "player_names": body.get("player_names") or [],
+        "photo_id": body.get("photo_id"),
+        "created_at": body.get("created_at") or _now(),
+        "finished_at": body.get("finished_at") or _now(),
+        "size": _as_int(body.get("size")),
+        "score": _as_int(body.get("score")),
+        "correct": _as_int(body.get("correct")),
+        "difficulty": body.get("difficulty"),
+        "modes": body.get("modes") or [],
+        "sessionless": True,
+        "questions": [sq for q in (body.get("questions") or []) if (sq := _sanitize_question(q))],
+    }
+    history.add_round(record)
+    return jsonify(record)
 
 
 @bp.get("/history/top")

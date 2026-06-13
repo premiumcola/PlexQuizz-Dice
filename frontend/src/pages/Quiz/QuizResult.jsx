@@ -1,7 +1,7 @@
-import { useEffect, useMemo, useState } from 'react';
-import { Loader2, Save, Trophy, TrendingUp, AlertTriangle, Clock, Check, RotateCcw, SkipForward, Camera, Medal, ListChecks } from 'lucide-react';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { Loader2, Save, Trophy, TrendingUp, AlertTriangle, Clock, Check, RotateCcw, SkipForward, Camera, Medal, ListChecks, Trash2 } from 'lucide-react';
 import { navigate } from '../../router';
-import { quizComplete, quizAbandon, quizHistory, quizRound, quizUploadPhoto, quizSubmitScore } from '../../api';
+import { quizComplete, quizAbandon, quizHistory, quizRound, quizUploadPhoto, quizSubmitScore, quizPersistRound, quizDeleteRound } from '../../api';
 import { loadResults, loadRound, clearRound } from './store';
 import { MODE_LABEL, fmt, scoreRank } from './util';
 
@@ -45,6 +45,35 @@ const mmss = (secs) => {
 };
 const pct = (n, total) => (total ? `${Math.round((n / total) * 100)}%` : '0%');
 
+// Assemble a sessionless (Sound / Serien / Mixed) round into the history-record shape the backend
+// /history store expects, so it lands in the "Runden" list like a normal round. Deep-link / token
+// fields are deliberately omitted (the review navigates by movie_key, which these rounds don't carry).
+function buildSessionlessRecord(roundId, results, round, setup, photoId) {
+  const answers = results.answers || [];
+  const solutions = results.solutions || [];
+  const rows = solutions.length ? solutions : answers;
+  return {
+    id: roundId,
+    name: setup.name || 'Runde',
+    player_names: setup.playerNames || [],
+    photo_id: photoId || null,
+    finished_at: new Date().toISOString(),
+    size: results.size ?? rows.length,
+    score: results.score || 0,
+    correct: results.correct ?? rows.filter((r) => r.correct).length,
+    difficulty: round?.difficulty || null,
+    modes: [results.mode].filter(Boolean),
+    questions: rows.map((r, i) => ({
+      id: `${roundId}:${i}`,
+      mode: answers[i]?.mode || results.mode || null,
+      correct: !!r.correct,
+      movie_title: r.title || null,
+      movie_year: r.year || null,
+      correct_text: r.title || null,
+    })),
+  };
+}
+
 function Stat({ icon, label, value, sub }) {
   return (
     <div className="flex flex-col items-center gap-1">
@@ -73,6 +102,21 @@ export default function QuizResult({ roundId }) {
   useEffect(() => {
     quizHistory().then((d) => setHistory(d.rounds || [])).catch(() => {});
   }, []);
+
+  // Auto-persist the finished round the moment the result screen is shown — so it ALWAYS lands in the
+  // "Runden" history and survives any navigation (system back, bottom nav, logo) with NO "Speichern"
+  // tap required. Idempotent: the backend upserts by round_id, so this and a later explicit Save never
+  // duplicate it. Server-session rounds complete; sessionless rounds post their assembled record.
+  const persistedRef = useRef(false);
+  useEffect(() => {
+    if (!results || persistedRef.current) return;
+    persistedRef.current = true;
+    const done = results.sessionless
+      ? quizPersistRound(buildSessionlessRecord(roundId, results, round, setup, photoId))
+      : quizComplete(roundId, { name: setup.name, player_names: setup.playerNames || [], photo_id: photoId || null });
+    done.catch(() => { persistedRef.current = false; }); // let an explicit Save retry if this failed
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [results, roundId]);
 
   if (!results) {
     return (
@@ -164,8 +208,12 @@ export default function QuizResult({ roundId }) {
     setSaving(true);
     setSaveError(false);
     if (sessionless) {
-      // No server session/history to complete — just publish the shared leaderboard entries, then
-      // land on the Bestenliste so the player sees their new entry (the round itself isn't persisted).
+      // The round was already auto-persisted on mount; re-persist here too (idempotent) in case that
+      // failed, publish the shared leaderboard entries, then land on the Bestenliste so the player
+      // sees their new entry. The round itself is already in the "Runden" history regardless.
+      try {
+        await quizPersistRound(buildSessionlessRecord(roundId, results, round, setup, photoId));
+      } catch { /* auto-persist on mount already stored it */ }
       await submitLeaderboard();
       clearRound(roundId);
       navigate('/quiz/history?tab=board');
@@ -195,12 +243,11 @@ export default function QuizResult({ roundId }) {
     }
   };
 
+  // Explicit removal — the ONLY action that deletes a finished round. Drops the (idle) server session
+  // AND removes the now auto-persisted round from history; merely navigating away never does this.
   const discard = async () => {
-    try {
-      await quizAbandon(roundId);
-    } catch {
-      /* ignore */
-    }
+    try { await quizAbandon(roundId); } catch { /* sessionless / session already gone */ }
+    try { await quizDeleteRound(roundId); } catch { /* not persisted yet / already gone */ }
     clearRound(roundId);
     navigate('/quiz');
   };
@@ -306,8 +353,8 @@ export default function QuizResult({ roundId }) {
         <button type="button" onClick={() => navigate(`/quiz/solutions/${roundId}`)} className="mt-3 w-full min-h-[44px] rounded-2xl bg-zinc-800 text-zinc-100 font-medium flex items-center justify-center gap-2 active:scale-[0.98] transition-transform">
           <ListChecks className="w-5 h-5 text-amber-400" /> Auflösung anzeigen
         </button>
-        <button type="button" onClick={discard} className="mt-3 w-full py-2 text-sm text-zinc-500 active:text-zinc-300">
-          Verwerfen
+        <button type="button" onClick={discard} className="mt-3 w-full min-h-[44px] py-2 text-sm text-zinc-500 active:text-zinc-300 flex items-center justify-center gap-1.5">
+          <Trash2 className="w-4 h-4" /> Runde verwerfen
         </button>
       </div>
     </div>

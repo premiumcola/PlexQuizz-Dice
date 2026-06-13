@@ -41,18 +41,37 @@ class History:
         atomic_write_json(path, data, ensure_ascii=False)
 
     def add_round(self, record: Dict[str, Any]) -> Dict[str, Any]:
+        """Persist a finished round, IDEMPOTENTLY by id: re-adding the same id replaces the existing
+        entry (so a later photo / leaderboard pass can update it) and never creates a duplicate round
+        or a second per-movie stats entry. Lets the result screen auto-persist on mount and the
+        optional "Speichern" re-persist without doubling anything."""
+        rid = record.get("id")
         with self._lock:
             rounds = self._read(self._history_path, [])
-            rounds.append(record)
+            idx = next((i for i, r in enumerate(rounds) if r.get("id") == rid), None)
+            if idx is None:
+                rounds.append(record)
+            else:
+                rounds[idx] = record
             self._write(self._history_path, rounds)
 
             stats = self._read(self._stats_path, {})
+            # Drop any prior contributions from this round_id, then re-add — so a re-persist of the
+            # same round leaves the per-movie attempt log unchanged (no double counting).
+            for key in list(stats.keys()):
+                kept = [a for a in stats[key].get("attempts", []) if a.get("round_id") != rid]
+                if kept:
+                    stats[key]["attempts"] = kept
+                else:
+                    del stats[key]
             for q in record.get("questions", []):
-                key = str(q.get("movie_key"))
+                key = str(q.get("movie_key") or "").strip()
+                if not key:
+                    continue  # sessionless questions carry no movie_key — keep them out of stats
                 entry = stats.setdefault(key, {"attempts": []})
                 entry["attempts"].append(
                     {
-                        "round_id": record["id"],
+                        "round_id": rid,
                         "mode": q.get("mode"),
                         "correct": bool(q.get("correct")),
                         "ts": record.get("finished_at"),
