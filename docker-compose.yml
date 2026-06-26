@@ -6,6 +6,9 @@ services:
         # Stamped into the Settings build label; set GIT_SHA in the env when building.
         GIT_SHA: "${GIT_SHA:-local}"
     container_name: plexdice
+    labels:
+      net.unraid.docker.icon: "http://192.168.178.10:8090/icons/icon-512.png"
+      net.unraid.docker.webui: "http://192.168.178.10:8090"
     ports:
       - "8090:8080"
     volumes:
