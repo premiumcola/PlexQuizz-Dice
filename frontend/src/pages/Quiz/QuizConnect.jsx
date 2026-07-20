@@ -55,6 +55,9 @@ function usePosterWidth(leftIds, rightIds, byId, ref, chipEls) {
     compute();
     const ro = new ResizeObserver(compute);
     if (ref.current) ro.observe(ref.current);
+    // Re-fit when a text chip reflows (fonts settle / longer label wraps) — its height feeds colFit,
+    // so observing only the container would miss late chip growth and under/oversize the posters.
+    Object.values(chipEls.current).forEach((el) => el && ro.observe(el));
     return () => ro.disconnect();
   }, [leftIds, rightIds, byId, ref, chipEls]);
   return w;
