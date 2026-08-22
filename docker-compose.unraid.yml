@@ -40,6 +40,9 @@ services:
     labels:
       # Opt this container IN to watchtower's label-scoped watching.
       - "com.centurylinklabs.watchtower.enable=true"
+      # Icon + WebUI link shown in Unraid's Docker tab.
+      - "net.unraid.docker.icon=http://192.168.178.10:8090/icons/icon-512.png"
+      - "net.unraid.docker.webui=http://192.168.178.10:8090"
 
   watchtower:
     # Maintained fork of the original (unmaintained) containrrr/watchtower.
