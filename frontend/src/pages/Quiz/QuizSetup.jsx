@@ -190,7 +190,7 @@ export default function QuizSetup() {
                 </span>
               </button>
               {showFilters && (
-                <div className="mt-2 p-4 rounded-2xl bg-zinc-900/60 ring-1 ring-zinc-800 max-h-[60dvh] overflow-y-auto overscroll-contain">
+                <div className="mt-2 p-4 rounded-2xl bg-zinc-900/60 ring-1 ring-zinc-800">
                   <MovieFilterPanel
                     movies={movies}
                     genreGroups={filters.genreGroups} setGenreGroups={filters.setGenreGroups} allGenres={filters.allGenres}
