@@ -2,7 +2,7 @@ import { useState, useMemo, useEffect, useRef } from 'react';
 import {
   Dices, SlidersHorizontal, ChevronDown, ChevronUp, Clock, Calendar, Star,
   AlertCircle, History as HistoryIcon, Youtube,
-  ExternalLink, Tv2, Sparkles, Play, Loader2, RefreshCw, BarChart3,
+  ExternalLink, Tv2, Sparkles, Play, Loader2, RefreshCw, BarChart3, RotateCcw, Check,
 } from 'lucide-react';
 import { getLibrary, movieInfo, getSettings, saveSettings } from '../api';
 import FilterFunnel from '../components/FilterFunnel';
@@ -15,6 +15,11 @@ import { usePrefs } from '../usePrefs';
 import { plexAppUrl } from '../lib/plexLink';
 
 const PREFS_KEY = 'plexdice:prefs:v1';
+// The "cup": keys of films already drawn, so a roll never repeats a film until the whole
+// filtered pool has come out once. Persisted so an iOS PWA reload or a tab switch keeps it;
+// a cup left untouched for half a day starts full again.
+const DRAWN_KEY = 'plexdice:drawn:v1';
+const DRAWN_TTL_MS = 12 * 60 * 60 * 1000;
 const LOADING_VERBS = ['ausgegraben', 'zusammengetragen', 'hochgeholt'];
 const FACT_SHOW = 4;
 
@@ -34,6 +39,16 @@ function loadPrefs() {
   } catch {
     return null;
   }
+}
+
+function loadDrawn() {
+  try {
+    const saved = JSON.parse(localStorage.getItem(DRAWN_KEY) || 'null');
+    if (saved && Array.isArray(saved.keys) && Date.now() - saved.at < DRAWN_TTL_MS) return saved.keys;
+  } catch {
+    /* storage unavailable or corrupt — start with a full cup */
+  }
+  return [];
 }
 
 export default function Dice({ onNeedSettings }) {
@@ -62,6 +77,7 @@ export default function Dice({ onNeedSettings }) {
   const [fireworks, setFireworks] = useState(false);
   const [fireworksKey, setFireworksKey] = useState(0);
   const [history, setHistory] = useState([]);
+  const [drawn, setDrawn] = useState(loadDrawn); // string keys taken out of the cup
   const [showHistory, setShowHistory] = useState(false);
   const [highlightSection, setHighlightSection] = useState(null);
   const [funnelExpanded, setFunnelExpanded] = useState(true); // open by default; collapses after a roll
@@ -228,8 +244,17 @@ export default function Dice({ onNeedSettings }) {
     });
   }, [movies, activeStages]);
 
-  const pick = () => {
-    if (filtered.length === 0) return;
+  // What is still in the cup for the current filters. Films drawn under other filters stay
+  // out too, so narrowing or widening the pool never brings back one already seen.
+  const remaining = useMemo(() => {
+    const out = new Set(drawn);
+    return filtered.filter((m) => !out.has(String(m.key)));
+  }, [filtered, drawn]);
+  const cupEmpty = filtered.length > 0 && remaining.length === 0;
+
+  // Draw one film from `cup`; `keptDrawn` is the drawn list the new key is added to.
+  const roll = (cup, keptDrawn) => {
+    if (cup.length === 0) return;
     setRolling(true);
     setShowFilters(false);
     setShowHistory(false);
@@ -237,7 +262,8 @@ export default function Dice({ onNeedSettings }) {
     setFunnelExpanded(false); // each new roll starts collapsed in result mode
     setShowFiltersOnResult(false); // …and the filter bars stay tucked away
 
-    const choice = filtered[Math.floor(Math.random() * filtered.length)];
+    const choice = cup[Math.floor(Math.random() * cup.length)];
+    const nextDrawn = [...keptDrawn, String(choice.key)];
 
     const tickInterval = setInterval(() => {
       setTicker(filtered[Math.floor(Math.random() * filtered.length)]);
@@ -249,6 +275,12 @@ export default function Dice({ onNeedSettings }) {
       setPicked(choice);
       setRollSeq((s) => s + 1);
       setHistory((h) => [choice, ...h.filter((x) => x.key !== choice.key)].slice(0, 12));
+      setDrawn(nextDrawn);
+      try {
+        localStorage.setItem(DRAWN_KEY, JSON.stringify({ keys: nextDrawn, at: Date.now() }));
+      } catch {
+        /* storage unavailable — the cup still works for this visit */
+      }
       setRolling(false);
       // Fire celebration AFTER the card has settled in its final position:
       // revealCard 0.55s animation + the +600ms scroll kickoff + ~400ms smooth-scroll
@@ -259,6 +291,16 @@ export default function Dice({ onNeedSettings }) {
         setTimeout(() => setFireworks(false), 1800);
       }, 1200);
     }, 2400);
+  };
+
+  const pick = () => roll(remaining, drawn);
+
+  // Put the current pool's films back into the cup and draw again. The film still on screen
+  // sits out this first draw, so the new round can't open with a back-to-back repeat.
+  const refillAndPick = () => {
+    const pool = new Set(filtered.map((m) => String(m.key)));
+    const cup = picked && filtered.length > 1 ? filtered.filter((m) => m.key !== picked.key) : filtered;
+    roll(cup, drawn.filter((k) => !pool.has(k)));
   };
 
   const fetchInfo = async (force = false) => {
@@ -513,9 +555,28 @@ export default function Dice({ onNeedSettings }) {
 
           {/* Roll button — orange primary on initial roll or while spinning, muted
               zinc secondary once a film is picked so "In Plex abspielen" is the only
-              accent CTA. Touch target stays >= 44px (py-3 + content). */}
-          {(() => {
+              accent CTA. Touch target stays >= 44px (py-3 + content). Once a film has
+              come out of the cup, a pill counts what is left; an empty cup swaps the
+              button for the "all drawn" notice with its start-over action. */}
+          {cupEmpty && !rolling ? (
+            <div className="w-full rounded-2xl bg-zinc-900 p-3 pl-4 flex items-center gap-3">
+              <Check className="w-5 h-5 text-amber-400 shrink-0" strokeWidth={2.5} />
+              <p className="flex-1 min-w-0 text-sm text-zinc-200">
+                {filtered.length === 1
+                  ? 'Der einzige Film ist gezogen'
+                  : `Alle ${filtered.length.toLocaleString('de-DE')} Filme gezogen`}
+              </p>
+              <button
+                type="button"
+                onClick={refillAndPick}
+                className="shrink-0 inline-flex items-center gap-2 px-4 min-h-[44px] rounded-xl bg-amber-500/15 text-amber-300 text-sm font-semibold active:scale-[0.97] transition-transform"
+              >
+                <RotateCcw className="w-4 h-4" /> Von vorne
+              </button>
+            </div>
+          ) : (() => {
             const secondary = picked && !rolling;
+            const left = !rolling && remaining.length < filtered.length ? remaining.length : null;
             return (
               <button
                 onClick={pick}
@@ -536,6 +597,13 @@ export default function Dice({ onNeedSettings }) {
                   <Dices className={secondary ? 'w-5 h-5' : 'w-7 h-7'} strokeWidth={2.5} />
                 </span>
                 {rolling ? 'Würfle…' : picked ? 'Nochmal würfeln' : 'Film würfeln'}
+                {left != null && (
+                  <span className={`px-2 py-0.5 rounded-full text-xs font-medium tabular-nums ${
+                    secondary ? 'bg-zinc-800 text-zinc-400' : 'bg-zinc-950/15 text-zinc-950/70'
+                  }`}>
+                    {left.toLocaleString('de-DE')} übrig
+                  </span>
+                )}
               </button>
             );
           })()}
